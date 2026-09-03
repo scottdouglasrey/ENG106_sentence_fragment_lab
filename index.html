@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#006EB6" />
+    <link rel="manifest" href="manifest.webmanifest" />
+    <link rel="icon" href="assets/app-icon.svg" type="image/svg+xml" />
+    <title>Sentence Fragment Lab</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Libre+Baskerville:wght@400;700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <a class="brand" href="#top" aria-label="Sentence Fragment Lab home">
+          <img class="brand-logo" src="assets/BYUI_logo_white.png" alt="BYU-Idaho" />
+          <span>Sentence<br /><strong>Fragment Lab</strong></span>
+        </a>
+        <div class="sidebar-label">Your learning path</div>
+        <nav class="phase-nav" aria-label="Learning path">
+          <button class="phase-link active" data-view="overview"><span class="phase-number">01</span><span><b>Overview</b><small>See your path</small></span></button>
+          <button class="phase-link" data-view="diagnostic"><span class="phase-number">02</span><span><b>Diagnostic</b><small>Find your starting point</small></span></button>
+          <button class="phase-link" data-view="practice"><span class="phase-number">03</span><span><b>Practice studio</b><small>Build the skill</small></span></button>
+          <button class="phase-link" data-view="mastery"><span class="phase-number">04</span><span><b>Mastery check</b><small>Show what you know</small></span></button>
+          <button class="phase-link" data-view="report"><span class="phase-number">05</span><span><b>My report</b><small>Download your journey</small></span></button>
+        </nav>
+        <div class="sidebar-bottom">
+          <div class="support-card">
+            <div class="support-icon">?</div>
+            <div><strong>Need a refresher?</strong><p>Visit the mini glossary anytime.</p></div>
+            <button class="text-button" data-action="glossary">Open glossary <span>↗</span></button>
+          </div>
+          <div class="student-chip"><span class="avatar">MR</span><span><b>Maya Rodriguez</b><small>ENG 106 · Fall 2026</small></span><span class="more">•••</span></div>
+        </div>
+      </aside>
+      <main class="main-content" id="top">
+        <header class="topbar">
+          <div class="breadcrumb">ENG 106 <span>/</span> Sentence skills</div>
+          <div class="top-actions"><span class="save-status"><i></i> Progress saved</span><button class="icon-button" aria-label="Notifications">♧</button><button class="avatar small">MR</button></div>
+        </header>
+        <div id="app" class="content-wrap"></div>
+      </main>
+    </div>
+    <div id="toast" class="toast" role="status"></div>
+    <div id="modal-root"></div>
+    <script src="question-bank.js"></script>
+    <script src="app.js"></script>
+    <script>
+      if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
+        window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js'));
+      }
+    </script>
+  </body>
+</html>

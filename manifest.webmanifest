@@ -1,0 +1,18 @@
+{
+  "name": "Sentence Fragment Lab",
+  "short_name": "Fragment Lab",
+  "description": "An adaptive ENG 106 learning lab for sentence fragments.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f6f7f8",
+  "theme_color": "#006EB6",
+  "icons": [
+    {
+      "src": "assets/app-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

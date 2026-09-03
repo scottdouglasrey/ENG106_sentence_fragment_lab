@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">Sentence Fragment Lab</title>
+  <desc id="desc">A white sentence mark on a BYU-Idaho Brand Blue background.</desc>
+  <rect width="512" height="512" rx="112" fill="#006EB6"/>
+  <path d="M125 151h262v54H125zm0 101h198v54H125zm0 101h143v54H125z" fill="#fff"/>
+  <circle cx="365" cy="379" r="28" fill="#A0D4ED"/>
+</svg>
