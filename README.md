@@ -29,9 +29,10 @@ For immediate user testing, a static HTTPS host such as Netlify Drop, Vercel, or
 - Browser-persisted learner event history using `localStorage`
 - Downloadable HTML mastery-performance report
 - Clear separation between content assets (`CONTENT`) and learner state (`state`)
-- Imported source bank: `question-bank.js` contains the 208 sentence items, 25 paragraph tasks, and coverage metadata from the supplied v3 workbook
+- Imported source bank: `question-bank.js` is generated from `Grammartar_Sentence_Fragments_Item_Bank_v3.md` and contains the 208 sentence items, 25 paragraph tasks, coverage metadata, and selection guidance
 - Official BYU-Idaho logo assets are stored in `assets/`
 - BYU-Idaho brand palette: Brand Blue `#006EB6`, black `#000000`, white `#FFFFFF`, gray `#949598`, with restrained supporting accents `#214491`, `#4F9ACF`, and `#A0D4ED`
+- Mastery report sections: diagnostic assessment results, completed learning interventions, mastery attempts/relearning loops, and final mastery item results
 
 ## Next architecture step
 
