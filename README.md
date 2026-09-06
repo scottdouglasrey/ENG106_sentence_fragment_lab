@@ -22,18 +22,29 @@ For immediate user testing, a static HTTPS host such as Netlify Drop, Vercel, or
 
 ## Included
 
-- Diagnostic assessment organized by sentence-fragment principle
-- Targeted mini-lessons and practice activities
-- Mastery assessment with a 75% mastery threshold
+- Diagnostic assessment organized under the five source-bank skills
+- Targeted guided practice, independent practice, and unseen verification
+- Four initial mastery items per skill with a 75% per-skill mastery threshold
 - Relearning → reassessment loop when mastery is not yet demonstrated
 - Browser-persisted learner event history using `localStorage`
 - Downloadable HTML mastery-performance report
-- Clear separation between content assets (`CONTENT`) and learner state (`state`)
+- Clear separation between source content, evaluation rules, and browser-local learner state
 - Imported source bank: `question-bank.js` is generated from `Grammartar_Sentence_Fragments_Item_Bank_v3.md` and contains the 208 sentence items, 25 paragraph tasks, coverage metadata, and selection guidance
+- Structured classification-and-reason interactions in place of written rationale prompts
+- Clickable fragment identification plus constrained revision for paragraph tasks
+- Browser-local deterministic scoring for constructed responses; no LLM or external scoring calls
+- Explicit `correct`, `incorrect`, and `needsReview` results with plain-language feedback
+- Machine-readable item rules in `evaluation-rules.js` and a shared evaluator in `open-text-evaluator.js`
+- Unseen alternate verification/mastery items when a response cannot be scored confidently
+- Backward-compatible migration of the earlier browser state shape
 - Official BYU-Idaho logo assets are stored in `assets/`
 - BYU-Idaho brand palette: Brand Blue `#006EB6`, black `#000000`, white `#FFFFFF`, gray `#949598`, with restrained supporting accents `#214491`, `#4F9ACF`, and `#A0D4ED`
 - Mastery report sections: diagnostic assessment results, completed learning interventions, mastery attempts/relearning loops, and final mastery item results
 
+## Local evaluator tests
+
+Serve the project, then open `tests/evaluator-tests.html`. The browser test suite covers valid, invalid, irrelevant, copied, incomplete, alternative, and uncertain responses across the local evaluator families. It also confirms that every writing task in the bank receives a local rule.
+
 ## Next architecture step
 
-The prototype keeps the data boundary small. `question-bank.js` is the content layer; it is normalized into skill and pool-specific views at runtime. The learner state adapter can later be replaced with authenticated API calls backed by a learner event store. Preserve the event shape (`type`, `detail`, `payload`, `at`) so reports can reconstruct the adaptive path.
+The prototype keeps the data boundary small. `question-bank.js` is the source content layer, `evaluation-rules.js` contains executable scoring metadata, and learner progress remains local to the browser. If an authenticated learner store is added later, preserve the event shape (`type`, `detail`, `payload`, `at`) so reports can reconstruct the adaptive path.

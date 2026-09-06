@@ -1,10 +1,14 @@
-const CACHE_NAME = 'sentence-fragment-lab-v2';
+const CACHE_NAME = 'sentence-fragment-lab-v6';
 const APP_SHELL = [
   './',
   './index.html',
   './styles.css',
   './app.js',
   './question-bank.js',
+  './evaluation-rules.js',
+  './open-text-evaluator.js',
+  './tests/evaluator-tests.html',
+  './tests/evaluator-tests.js',
   './manifest.webmanifest',
   './assets/app-icon.svg',
   './assets/BYUI_logo_white.png',
@@ -33,18 +37,17 @@ self.addEventListener('activate', (event) => {
 
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
+  const requestUrl = new URL(event.request.url);
+  if (requestUrl.origin !== self.location.origin) return;
 
   event.respondWith(
-    caches.match(event.request).then((cached) => {
-      if (cached) return cached;
-
-      return fetch(event.request)
-        .then((response) => {
-          const copy = response.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
-          return response;
-        })
-        .catch(() => caches.match('./index.html'));
-    })
+    fetch(event.request)
+      .then((response) => {
+        const copy = response.clone();
+        caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
+        return response;
+      })
+      .catch(() => caches.match(event.request)
+        .then((cached) => cached || caches.match('./index.html')))
   );
 });
