@@ -290,6 +290,12 @@ function showToast(message) {
   const toast = document.querySelector('#toast'); toast.textContent = message; toast.classList.add('show');
   window.setTimeout(() => toast.classList.remove('show'), 3000);
 }
+function resetLocalProgress() {
+  if (!window.confirm('Reset all Sentence Fragment Lab progress saved in this browser? This cannot be undone.')) return;
+  localStorage.removeItem(STORAGE_KEY);
+  window.location.hash = 'top';
+  window.location.reload();
+}
 
 function sameNumbers(left, right) {
   const a = [...(left || [])].map(Number).sort((x, y) => x - y);
@@ -827,6 +833,7 @@ function bindEvents() {
   });
   document.querySelector('[data-action="download-report"]')?.addEventListener('click', downloadReport);
   document.querySelector('[data-action="glossary"]')?.addEventListener('click', openGlossary);
+  document.querySelector('[data-action="reset-state"]')?.addEventListener('click', resetLocalProgress);
 }
 
 window.FragmentLab = { evaluateAnswer, answerComplete, normalizeBankItem, targetSentenceIndices,
