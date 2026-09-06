@@ -446,14 +446,7 @@ function activePhase() {
 function setView(view) { state.view = view; currentQuestion = 0; saveState(); render(); window.scrollTo({ top: 0, behavior: 'smooth' }); }
 
 function journey() {
-  const phase = activePhase();
-  const steps = [['diagnostic', 'Diagnostic', 'Find your starting point'], ['practice', 'Learning', 'Instruction and practice'],
-    ['mastery', 'Mastery check', 'Show what you know'], ['report', 'Final report', 'Your learning journey']];
-  const current = steps.findIndex(([id]) => id === phase);
-  return `<div class="journey-bar"><div class="journey-top"><b>YOUR ADAPTIVE PATH</b><span>${state.masteryComplete ? 'Complete' : `Step ${current + 1} of 4`}</span></div><div class="journey-track">${steps.map(([id, name, sub], index) => {
-    const complete = index < current || (state.masteryComplete && id === 'report');
-    return `<div class="journey-step ${complete ? 'complete' : index === current ? 'current' : ''}"><span class="journey-dot">${complete ? '✓' : `0${index + 1}`}</span><span><b>${name}</b><small>${sub}</small></span></div>`;
-  }).join('')}</div></div>`;
+  return '';
 }
 function recentActivity() {
   if (!state.events.length) return '<div class="empty-state compact">Your learning history will appear here.</div>';
@@ -484,6 +477,13 @@ function overviewView() {
 function choiceControl(choices, selected, field = 'choice') {
   return `<div class="choice-list">${choices.map((choice, index) => `<label class="choice ${Number(selected) === index ? 'selected' : ''}"><input type="radio" name="${field}" data-answer-field="${field}" value="${index}" ${Number(selected) === index ? 'checked' : ''}/><span>${esc(choice)}</span></label>`).join('')}</div>`;
 }
+function questionPrompt(item, override = '') {
+  const raw = String(override || item.displayPrompt || '').trim();
+  const parts = raw.split(/\n\s*\n/);
+  const instruction = parts.shift() || '';
+  const stimulus = parts.join('\n\n').trim();
+  return `<div class="question-prompt">${esc(instruction)}</div>${stimulus ? `<div class="question-stimulus">${esc(stimulus)}</div>` : ''}`;
+}
 function responseControl(item, answer) {
   if (item.responseMode === 'choice') return choiceControl(item.choices, answer);
   if (item.responseMode === 'reasonChoice') return `<fieldset class="response-group"><legend>Choose the best explanation.</legend>${choiceControl(item.reasonTask.choices, answer, 'reason')}</fieldset>`;
@@ -513,7 +513,7 @@ function assessmentView(kind) {
   return `${journey()}<div class="view-header"><div><p class="eyebrow">${label}</p><h1>${isMastery ? 'Show what you know.' : 'Find your starting point.'}</h1><p class="subhead">${intro}</p></div><span class="pill ${isMastery ? 'accent' : ''}">${items.length} tasks · untimed</span></div><div class="assessment-layout"><aside class="question-list"><h3>Your progress</h3>${items.map((question, index) => {
     const complete = answerComplete(question, answers[question.id]);
     return `<button class="q-nav ${index === currentQuestion ? 'active' : ''} ${complete ? 'answered' : ''}" data-q="${index}"><b>${complete ? '✓' : String(index + 1).padStart(2, '0')}</b><span>${esc(domain(question.domain).name)}<small>${complete ? 'Answered' : 'Not answered'}</small></span></button>`;
-  }).join('')}</aside><section class="question-card"><div class="question-meta"><span class="pill gray">Skill ${item.domain.toUpperCase()} · ${esc(domain(item.domain).name)}</span><small>${esc(item.id)} · Task ${currentQuestion + 1} of ${items.length}</small></div><h2 class="question-text">${esc(item.displayPrompt)}</h2>${responseControl(item, answers[item.id])}<div class="question-footer"><small>${answered} of ${items.length} answered</small><div class="button-row no-margin"><button class="button secondary" data-action="previous" ${currentQuestion === 0 ? 'disabled' : ''}>← Back</button>${currentQuestion < items.length - 1 ? '<button class="button" data-action="next">Save & next →</button>' : `<button class="button accent" data-action="finish-assessment" data-kind="${kind}">${isMastery ? 'Finish mastery check' : 'See my learning path'} →</button>`}</div></div></section></div>`;
+  }).join('')}</aside><section class="question-card"><div class="question-meta"><span class="pill gray">Skill ${item.domain.toUpperCase()} · ${esc(domain(item.domain).name)}</span></div>${questionPrompt(item)}${responseControl(item, answers[item.id])}<div class="question-footer"><small>${answered} of ${items.length} answered</small><div class="button-row no-margin"><button class="button secondary" data-action="previous" ${currentQuestion === 0 ? 'disabled' : ''}>← Back</button>${currentQuestion < items.length - 1 ? '<button class="button" data-action="next">Save & next →</button>' : `<button class="button accent" data-action="finish-assessment" data-kind="${kind}">${isMastery ? 'Finish mastery check' : 'See my learning path'} →</button>`}</div></div></section></div>`;
 }
 
 function stageName(stage) { return { 'Guided practice': 'Guided', 'Independent practice': 'Independent', Verification: 'Verification' }[stage] || stage; }
@@ -541,7 +541,7 @@ function practiceView() {
   const step = intervention.steps[intervention.stepIndex];
   if (!step) return `${journey()}<div class="empty-state"><h2>This skill needs instructor review.</h2><p>No unused item is available for the next learning stage.</p></div>`;
   const item = BANK_BY_ID[step.itemId]; const fallback = step.fallback ? fallbackRepair(item) : null;
-  return `${journey()}<div class="view-header"><div><p class="eyebrow">Targeted learning · Round ${currentRound()}</p><h1>Your learning studio.</h1><p class="subhead">Practice is organized by the same five course skills. Only skills identified by your diagnostic or latest mastery check are assigned.</p></div><span class="pill">${completeCount} of ${ids.length} skills complete</span></div>${practiceDomainList(ids, selectedId)}<div class="stage-progress">${intervention.steps.map((practiceStep, index) => `<span class="${index < intervention.stepIndex ? 'complete' : index === intervention.stepIndex ? 'current' : ''}">${index < intervention.stepIndex ? '✓' : index + 1} ${stageName(practiceStep.stage)}</span>`).join('')}</div><div class="practice-grid"><article class="lesson-card"><p class="eyebrow">Mini lesson · Skill ${selectedId.toUpperCase()}</p><h2>${esc(selected.name)}</h2><p>${esc(selected.lesson)}</p><div class="plain-language-tip"><strong>Try this check</strong>${esc(selected.tip)}</div><ul><li>Read the entire word group.</li><li>Find who or what it is about.</li><li>Find the main verb and decide whether the thought can stand alone.</li></ul></article><article class="practice-question"><p class="eyebrow">${esc(stageName(step.stage))} task · ${esc(item.id)}</p><h2 class="question-text">${esc(step.fallback ? 'Choose the revision that best completes the thought.' : item.displayPrompt)}</h2>${step.fallback ? choiceControl(fallback.choices, step.fallbackAnswer, 'fallback') : responseControl(item, step.answer)}<div id="practice-feedback">${step.feedback ? feedbackBox(step.result, step.feedback) : ''}</div><div class="button-row"><button class="button accent" data-action="check-practice">Check my work →</button></div></article></div>`;
+  return `${journey()}<div class="view-header"><div><p class="eyebrow">Targeted learning · Round ${currentRound()}</p><h1>Your learning studio.</h1><p class="subhead">Practice is organized by the same five course skills. Only skills identified by your diagnostic or latest mastery check are assigned.</p></div><span class="pill">${completeCount} of ${ids.length} skills complete</span></div>${practiceDomainList(ids, selectedId)}<div class="stage-progress">${intervention.steps.map((practiceStep, index) => `<span class="${index < intervention.stepIndex ? 'complete' : index === intervention.stepIndex ? 'current' : ''}">${index < intervention.stepIndex ? '✓' : index + 1} ${stageName(practiceStep.stage)}</span>`).join('')}</div><div class="practice-grid"><article class="lesson-card"><p class="eyebrow">Mini lesson · Skill ${selectedId.toUpperCase()}</p><h2>${esc(selected.name)}</h2><p>${esc(selected.lesson)}</p><div class="plain-language-tip"><strong>Try this check</strong>${esc(selected.tip)}</div><ul><li>Read the entire word group.</li><li>Find who or what it is about.</li><li>Find the main verb and decide whether the thought can stand alone.</li></ul></article><article class="practice-question"><p class="eyebrow">${esc(stageName(step.stage))} task</p>${questionPrompt(item, step.fallback ? 'Choose the revision that best completes the thought.' : '')}${step.fallback ? choiceControl(fallback.choices, step.fallbackAnswer, 'fallback') : responseControl(item, step.answer)}<div id="practice-feedback">${step.feedback ? feedbackBox(step.result, step.feedback) : ''}</div><div class="button-row"><button class="button accent" data-action="check-practice">Check my work →</button></div></article></div>`;
 }
 function practiceDomainList(ids, selectedId) {
   const diagnosticById = Object.fromEntries(diagnosticScores().map((score) => [score.id, score]));
