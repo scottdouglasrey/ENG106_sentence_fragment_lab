@@ -475,7 +475,8 @@ function overviewView() {
 }
 
 function choiceControl(choices, selected, field = 'choice') {
-  return `<div class="choice-list">${choices.map((choice, index) => `<label class="choice ${Number(selected) === index ? 'selected' : ''}"><input type="radio" name="${field}" data-answer-field="${field}" value="${index}" ${Number(selected) === index ? 'checked' : ''}/><span>${esc(choice)}</span></label>`).join('')}</div>`;
+  const hasSelection = selected !== null && selected !== undefined && selected !== '';
+  return `<div class="choice-list">${choices.map((choice, index) => `<label class="choice ${hasSelection && Number(selected) === index ? 'selected' : ''}"><input type="radio" name="${field}" data-answer-field="${field}" value="${index}" ${hasSelection && Number(selected) === index ? 'checked' : ''}/><span>${esc(choice)}</span></label>`).join('')}</div>`;
 }
 function questionPrompt(item, override = '') {
   const raw = String(override || item.displayPrompt || '').trim();
