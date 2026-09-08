@@ -3,7 +3,7 @@ const BANK = window.QUESTION_BANK;
 const RULES = window.EVALUATION_RULES;
 const LOCAL_EVALUATOR = window.OpenTextEvaluator;
 const STORAGE_KEY = 'fragment-lab-state';
-const DATA_VERSION = 'v4-structured-local-evaluation';
+const DATA_VERSION = 'v6-strategy-aware-local-evaluation';
 const MASTERY_THRESHOLD = 75;
 const INITIAL_MASTERY_ITEMS_PER_SKILL = 4;
 
@@ -50,6 +50,26 @@ const DOMAINS = [
   }
 ];
 
+const MISCONCEPTION_GUIDANCE = {
+  A1_NO_COMPLETE_THOUGHT: { label: 'Complete thoughts', lesson: 'A sentence must express a thought that can stand on its own. If the words leave the reader waiting for the main point, the thought is incomplete.', tip: 'Read the words aloud and ask what the writer is actually saying happened or is true.' },
+  A2_VERB_CONFUSION: { label: 'Recognizing the main verb', lesson: 'A complete sentence needs a main verb that shows what the subject does or is. Verb-like words do not always complete the action by themselves.', tip: 'Find the subject, then identify the verb that makes the main statement about it.' },
+  A3_LENGTH_HEURISTIC: { label: 'Length is not the test', lesson: 'Sentence length does not determine completeness. A two-word sentence can be complete, and a long word group can still be a fragment.', tip: 'Ignore length. Look for a subject, a main verb, and a thought that stands alone.' },
+  A4_PUNCTUATION_HEURISTIC: { label: 'Punctuation is not the test', lesson: 'A capital letter and end punctuation make words look finished, but they cannot supply a missing subject, main verb, or complete thought.', tip: 'Temporarily ignore the capital and period while checking the sentence structure.' },
+  B1_MISSING_SUBJECT: { label: 'Missing subject', lesson: 'Some fragments name an action without identifying who or what performs it. Add a grammatical subject that clearly belongs with the original action.', tip: 'Ask: Who or what performed this action?' },
+  B2_MISSING_PREDICATE: { label: 'Missing main action', lesson: 'Some fragments name or describe a subject without making a complete statement about it. The sentence needs a main verb that tells what the subject does or is.', tip: 'After finding the subject, ask: What does it do, or what is true about it?' },
+  B3_VERBAL_AS_PREDICATE: { label: 'Verb-like words and main verbs', lesson: 'An -ing or -ed word can describe a subject without serving as the sentence’s complete main verb. Look for the verb that makes the main statement.', tip: 'Try placing “is,” “was,” or another complete verb with the subject and see which action is the main one.' },
+  C1_SUBJECT_VERB_EQUALS_SENTENCE: { label: 'A clause may still depend on another thought', lesson: 'A word group can contain a subject and verb and still be incomplete when a connecting word makes it depend on another thought.', tip: 'After finding the subject and verb, check whether the opening word leaves you waiting for more.' },
+  C2_SUBORDINATOR_UNRECOGNIZED: { label: 'Words that create dependence', lesson: 'Words such as because, although, when, while, if, and unless can make one thought depend on another thought.', tip: 'Find the connecting word, then locate the complete thought it is attached to.' },
+  C3_DELETE_SUBORDINATOR_ONLY: { label: 'Preserving the relationship', lesson: 'Deleting the connecting word may erase the relationship between ideas. A stronger repair often keeps that word and adds or attaches a complete thought.', tip: 'Keep the connecting word and ask what complete thought belongs with it.' },
+  C4_RELATIVE_CLAUSE_COMPLETE: { label: 'Who, which, and that clauses', lesson: 'A clause beginning with who, which, or that usually describes a nearby noun and does not stand alone as the sentence’s main thought.', tip: 'Find the noun being described, then look for the sentence’s main statement about that noun.' },
+  D1_ING_EQUALS_VERB: { label: '-ing phrase fragments', lesson: 'An -ing word can name an action while the word group still lacks a complete main statement. Attach the phrase to a subject and main verb.', tip: 'Ask who is performing the -ing action and what complete statement is made about that person or thing.' },
+  D2_INFINITIVE_EQUALS_PREDICATE: { label: 'To + verb phrase fragments', lesson: 'A to + verb phrase usually explains a purpose or goal. By itself, it does not make a complete statement.', tip: 'Ask who has the purpose or goal, and what that person or thing does.' },
+  D3_DESCRIPTIVE_DETAIL_COMPLETE: { label: 'Descriptive phrase fragments', lesson: 'Descriptive words can add useful detail without making a complete statement. Attach the detail to a sentence with a subject and main verb.', tip: 'Ask what the description belongs to and what complete statement is made about it.' },
+  E1_OVEREDITING: { label: 'Editing only what needs repair', lesson: 'A paragraph repair should change the fragments while preserving sentences that are already complete.', tip: 'Check each sentence before editing it. Leave complete thoughts unchanged.' },
+  E2_CONTEXT_DEPENDENCE: { label: 'Finding fragments in paragraphs', lesson: 'Fragments can be harder to notice in connected prose. Check each sentence boundary instead of relying on the paragraph’s overall flow.', tip: 'Pause at every period and test whether that word group can stand alone.' },
+  E3_MEANING_DAMAGE: { label: 'Preserving the writer’s meaning', lesson: 'A repair must be grammatical and preserve the writer’s intended relationship and details.', tip: 'Compare the repair with the original paragraph and check whether any action, time, cause, or contrast changed.' }
+};
+
 function rowsToObjects(columns, rows) {
   return rows.map((row) => Object.fromEntries(columns.map((column, index) => [column, row[index] || ''])));
 }
@@ -67,6 +87,24 @@ function rotateOptions(options, correctIndex, seed) {
 
 function classificationAnswer(rubric) {
   return /^\s*complete sentence/i.test(String(rubric || '')) ? 0 : 1;
+}
+
+function misconceptionTags(item) {
+  return String(item.misconceptions || '').split(/\s*;\s*/).map((tag) => tag.trim()).filter(Boolean);
+}
+
+function primaryMisconception(item) {
+  if (item.evaluation?.targetTag) return item.evaluation.targetTag;
+  const tags = misconceptionTags(item);
+  const evidence = `${item.rubric || ''} ${item.family || ''}`.toLowerCase();
+  const prompt = String(item.prompt || '').toLowerCase();
+  const preferred = [];
+  if (/missing subject|lacks? (a )?subject|who or what performs/.test(evidence)) preferred.push('B1_MISSING_SUBJECT');
+  if (/missing predicate|main verb|complete predicate/.test(evidence)) preferred.push('B2_MISSING_PREDICATE');
+  if (/\bwhich\b|\bwho\b|relative clause/.test(prompt + evidence)) preferred.push('C4_RELATIVE_CLAUSE_COMPLETE');
+  if (/\b(to\s+\w+)|infinitive/.test(prompt + evidence)) preferred.push('D2_INFINITIVE_EQUALS_PREDICATE');
+  if (/\b\w+ing\b|particip|verbal/.test(prompt + evidence)) preferred.push('D1_ING_EQUALS_VERB', 'B3_VERBAL_AS_PREDICATE');
+  return preferred.find((tag) => tags.includes(tag)) || tags[0] || '';
 }
 
 function answerFromOptions(rubric, choices) {
@@ -105,14 +143,38 @@ function reasonText(item, complete) {
 function buildReasonTask(item) {
   const complete = classificationAnswer(item.rubric) === 0;
   const correct = reasonText(item, complete);
-  const distractors = [
-    'It is correct because it begins with a capital letter and ends with punctuation.',
-    'Its length alone determines whether it is a complete sentence.',
-    'Any word ending in -ing automatically serves as the sentence’s main verb.',
-    'A sentence is complete whenever it includes a person, place, or thing.',
-    'A word such as because automatically makes any word group complete.'
-  ].filter((choice) => choice !== correct);
-  return rotateOptions([correct, ...distractors.slice(0, 3)], 0, item.id);
+  const catalog = [
+    { text: 'It is complete because it begins with a capital letter and ends with punctuation.', tag: 'A4_PUNCTUATION_HEURISTIC' },
+    { text: 'Its length determines whether it is a complete sentence.', tag: 'A3_LENGTH_HEURISTIC' },
+    { text: 'Any word ending in -ing automatically serves as the sentence’s main verb.', tag: item.domain === 'b' ? 'B3_VERBAL_AS_PREDICATE' : 'D1_ING_EQUALS_VERB' },
+    { text: 'It names a person, place, or thing, so no main action is needed.', tag: 'B2_MISSING_PREDICATE' },
+    { text: 'The action is present, so it does not need to identify who or what performs it.', tag: 'B1_MISSING_SUBJECT' },
+    { text: 'A word such as because or although automatically makes the word group complete.', tag: 'C2_SUBORDINATOR_UNRECOGNIZED' },
+    { text: 'Any word group with a subject and verb can stand alone.', tag: 'C1_SUBJECT_VERB_EQUALS_SENTENCE' },
+    { text: 'A clause beginning with who, which, or that can always stand alone.', tag: 'C4_RELATIVE_CLAUSE_COMPLETE' },
+    { text: 'A to + verb phrase supplies the complete main action by itself.', tag: 'D2_INFINITIVE_EQUALS_PREDICATE' },
+    { text: 'Descriptive details can stand alone without a subject and main verb.', tag: 'D3_DESCRIPTIVE_DETAIL_COMPLETE' }
+  ];
+  const domainPriority = {
+    a: ['A4_', 'A3_', 'A1_', 'B2_'],
+    b: ['B1_', 'B2_', 'B3_', 'A2_', 'A4_'],
+    c: ['C1_', 'C2_', 'C4_', 'C3_', 'A1_'],
+    d: ['D1_', 'D2_', 'D3_', 'B3_', 'A1_']
+  }[item.domain] || [];
+  const distractors = catalog.filter((entry) => entry.text !== correct)
+    .sort((left, right) => {
+      const leftRank = domainPriority.findIndex((prefix) => left.tag.startsWith(prefix));
+      const rightRank = domainPriority.findIndex((prefix) => right.tag.startsWith(prefix));
+      return (leftRank < 0 ? 99 : leftRank) - (rightRank < 0 ? 99 : rightRank);
+    }).slice(0, 3);
+  const entries = [{ text: correct, tag: '', correct: true }, ...distractors];
+  const offset = [...String(item.id || '')].reduce((total, char) => total + char.charCodeAt(0), 0) % entries.length;
+  const rotated = entries.map((_, index) => entries[(index + offset) % entries.length]);
+  return {
+    choices: rotated.map((entry) => entry.text),
+    answer: rotated.findIndex((entry) => entry.correct),
+    evidenceTags: rotated.map((entry) => entry.tag)
+  };
 }
 
 function cleanPrompt(item) {
@@ -137,7 +199,8 @@ function normalizeBankItem(source, isParagraph = false) {
   if (isParagraph) responseMode = 'paragraphRepair';
   else if (/classification \+ explanation/i.test(type)) {
     responseMode = 'classifyReason'; choices = ['Complete sentence', 'Fragment']; answer = classificationAnswer(rubric);
-  } else if (/short explanation/i.test(type)) responseMode = 'reasonChoice';
+  } else if (/short explanation/i.test(type)
+    || (/short response/i.test(type) && /identify what is missing/i.test(source.Prompt || ''))) responseMode = 'reasonChoice';
   else if (/classification \+ repair/i.test(type)) {
     responseMode = 'classifyRepair'; choices = ['Complete sentence', 'Fragment']; answer = classificationAnswer(rubric);
   } else if (options.length) {
@@ -308,43 +371,75 @@ function targetSentenceIndices(item) {
   return paragraphSentences(item).map((sentence, index) => ({ index, text: LOCAL_EVALUATOR.normalizeText(sentence).replace(/[.!?]+$/, '').toLowerCase() }))
     .filter((entry) => targets.includes(entry.text)).map((entry) => entry.index);
 }
-function result(status, feedback, checks = {}, reasons = []) {
-  return { status, score: status === 'correct' ? 1 : 0, evaluatorVersion: LOCAL_EVALUATOR.version, checks, reasons, feedback };
+function structuredEvidence(item, correct, selectedTag = '', strength = 'moderate') {
+  const tag = selectedTag || primaryMisconception(item);
+  if (!tag) return [];
+  return [{
+    tag,
+    outcome: correct ? 'counterevidence' : 'supports',
+    strength,
+    reason: correct
+      ? 'The response matched the targeted sentence evidence.'
+      : 'The response indicates that this misconception may need instruction.'
+  }];
+}
+
+function result(status, feedback, checks = {}, reasons = [], details = {}) {
+  return {
+    status,
+    score: status === 'correct' ? 1 : 0,
+    confidence: details.confidence || 'high',
+    evaluatorVersion: LOCAL_EVALUATOR.version,
+    checks,
+    reasons,
+    feedback,
+    target: details.target || null,
+    quality: details.quality || null,
+    misconceptionEvidence: details.misconceptionEvidence || [],
+    responseIssues: details.responseIssues || [],
+    advisories: details.advisories || []
+  };
 }
 
 function evaluateAnswer(item, answer) {
   if (item.responseMode === 'choice') {
     const correct = Number(answer) === item.answer;
     return result(correct ? 'correct' : 'incorrect', correct ? 'That answer matches the sentence evidence.' : domain(item.domain).feedback,
-      { selectedCorrectOption: correct }, correct ? [] : [domain(item.domain).feedback]);
+      { selectedCorrectOption: correct }, correct ? [] : [domain(item.domain).feedback],
+      { misconceptionEvidence: structuredEvidence(item, correct) });
   }
   if (item.responseMode === 'reasonChoice') {
     const correct = Number(answer) === item.reasonTask.answer;
+    const selectedTag = item.reasonTask.evidenceTags?.[Number(answer)] || '';
     return result(correct ? 'correct' : 'incorrect', correct ? item.reasonTask.choices[item.reasonTask.answer] : domain(item.domain).feedback,
-      { selectedBestExplanation: correct }, correct ? [] : ['Choose the explanation based on sentence structure, not length or punctuation alone.']);
+      { selectedBestExplanation: correct }, correct ? [] : ['Choose the explanation based on sentence structure, not length or punctuation alone.'],
+      { misconceptionEvidence: structuredEvidence(item, correct, selectedTag, selectedTag ? 'strong' : 'moderate') });
   }
   if (item.responseMode === 'classifyReason') {
     const classificationCorrect = Number(answer?.classification) === item.answer;
     const reasonCorrect = Number(answer?.reason) === item.reasonTask.answer;
     const correct = classificationCorrect && reasonCorrect;
+    const selectedTag = item.reasonTask.evidenceTags?.[Number(answer?.reason)] || '';
     return result(correct ? 'correct' : 'incorrect', correct ? 'Your decision and supporting reason both match the sentence evidence.' : domain(item.domain).feedback,
       { classificationCorrect, reasonCorrect }, correct ? [] : [
         !classificationCorrect ? 'Reconsider whether the words express a complete thought.' : '',
         !reasonCorrect ? 'Choose a reason based on the subject, main verb, and complete thought.' : ''
-      ].filter(Boolean));
+      ].filter(Boolean), { misconceptionEvidence: structuredEvidence(item, correct, selectedTag, selectedTag ? 'strong' : 'moderate') });
   }
   if (item.responseMode === 'classifyRepair') {
     const classificationCorrect = Number(answer?.classification) === item.answer;
     const writing = LOCAL_EVALUATOR.evaluateOpenText(item, answer?.text || '');
     if (!classificationCorrect) return result('incorrect', domain(item.domain).feedback,
-      { classificationCorrect: false, ...writing.checks }, ['Reconsider whether the original word group is complete or a fragment.', ...writing.reasons]);
+      { classificationCorrect: false, ...writing.checks }, ['Reconsider whether the original word group is complete or a fragment.', ...writing.reasons],
+      { misconceptionEvidence: structuredEvidence(item, false) });
     return { ...writing, checks: { classificationCorrect, ...writing.checks } };
   }
   if (item.responseMode === 'paragraphRepair') {
     const selectedCorrectly = sameNumbers(answer?.selected, targetSentenceIndices(item));
     const writing = LOCAL_EVALUATOR.evaluateOpenText(item, answer?.text || '');
     if (!selectedCorrectly) return result('incorrect', 'Select every fragment in the paragraph before revising it.',
-      { selectedCorrectly, ...writing.checks }, ['One or more sentence selections need another look.']);
+      { selectedCorrectly, ...writing.checks }, ['One or more sentence selections need another look.'],
+      { misconceptionEvidence: structuredEvidence(item, false, 'E2_CONTEXT_DEPENDENCE', 'strong') });
     return { ...writing, checks: { selectedCorrectly, ...writing.checks } };
   }
   return LOCAL_EVALUATOR.evaluateOpenText(item, answer || '');
@@ -383,6 +478,29 @@ function diagnosticRows() { return assessmentRows('diagnostic'); }
 function diagnosticScores() { return domainScoresFromRows(diagnosticRows()); }
 function diagnosticOverall() { return overallFromRows(diagnosticRows()); }
 function currentRound() { return state.masteryLoops.length + 1; }
+function focusTagsFromRows(rows, domainId) {
+  const totals = new Map();
+  rows.filter((row) => row.item.domain === domainId).forEach((row) => {
+    (row.evaluation.misconceptionEvidence || []).forEach((entry) => {
+      if (!entry.tag || entry.outcome === 'none') return;
+      const magnitude = entry.strength === 'strong' ? 2 : entry.strength === 'moderate' ? 1 : 0.5;
+      const direction = entry.outcome === 'supports' ? 1 : -1;
+      totals.set(entry.tag, (totals.get(entry.tag) || 0) + (magnitude * direction));
+    });
+  });
+  const ranked = [...totals.entries()].filter(([, value]) => value > 0).sort((left, right) => right[1] - left[1]);
+  if (ranked.length) return ranked.map(([tag]) => tag);
+  return rows.filter((row) => row.item.domain === domainId && row.evaluation.status !== 'correct')
+    .map((row) => primaryMisconception(row.item)).filter((tag, index, all) => tag && all.indexOf(tag) === index);
+}
+function focusTagsForDomain(domainId) {
+  const latestAttempt = state.masteryAttempts.at(-1);
+  if (latestAttempt?.weakDomainIds?.includes(domainId) && latestAttempt.rows) {
+    const masteryTags = focusTagsFromRows(latestAttempt.rows, domainId);
+    if (masteryTags.length) return masteryTags;
+  }
+  return focusTagsFromRows(diagnosticRows(), domainId);
+}
 function requiredPracticeIds() {
   if (!state.diagnosticComplete) return [];
   const latestLoop = state.masteryLoops[state.masteryLoops.length - 1];
@@ -399,9 +517,13 @@ function usedItemIds() {
   Object.values(state.interventions).forEach((intervention) => (intervention?.steps || []).forEach((step) => { if (step.itemId) ids.add(step.itemId); }));
   return ids;
 }
-function nextUnseenItem(domainId, stage, extraExcluded = []) {
+function nextUnseenItem(domainId, stage, extraExcluded = [], focusTags = []) {
   const excluded = usedItemIds(); extraExcluded.forEach((id) => excluded.add(id));
-  return itemsFor(stage, domainId).find((item) => !excluded.has(item.id))
+  const available = itemsFor(stage, domainId).filter((item) => !excluded.has(item.id));
+  const targeted = focusTags.length ? available.find((item) => (
+    misconceptionTags(item).some((tag) => focusTags.includes(tag))
+  )) : null;
+  return targeted || available[0]
     || (stage === 'Guided practice' || stage === 'Independent practice' ? itemsFor(stage, domainId)[0] : null);
 }
 function ensureIntervention(domainId) {
@@ -409,12 +531,13 @@ function ensureIntervention(domainId) {
   const existing = state.interventions[domainId];
   if (existing?.round === round) return existing;
   const selected = [];
+  const focusTags = focusTagsForDomain(domainId);
   const steps = ['Guided practice', 'Independent practice', 'Verification'].map((stage) => {
-    const item = nextUnseenItem(domainId, stage, selected); if (item) selected.push(item.id);
+    const item = nextUnseenItem(domainId, stage, selected, focusTags); if (item) selected.push(item.id);
     return { stage, itemId: item?.id || null, answer: null, result: null, attempts: 0, reviewCount: 0,
       fallback: false, fallbackAnswer: null, feedback: '' };
   }).filter((step) => step.itemId);
-  state.interventions[domainId] = { round, stepIndex: 0, complete: false, unsuccessfulAttempts: 0, steps };
+  state.interventions[domainId] = { round, focusTags, stepIndex: 0, complete: false, unsuccessfulAttempts: 0, steps };
   saveState(); return state.interventions[domainId];
 }
 function masteryUsedIds() {
@@ -533,6 +656,8 @@ function practiceView() {
   if (!ids.length) return `${journey()}<div class="view-header"><div><p class="eyebrow">Targeted learning</p><h1>No required practice right now.</h1><p class="subhead">Your diagnostic evidence did not identify a skill below the practice threshold. Diagnostic success does not count as mastery, so your protected mastery check is next.</p></div></div><div class="focus-card"><div><p class="eyebrow">Ready for mastery</p><h3>Continue to the protected assessment.</h3><p>The mastery items have not appeared in diagnostic or practice.</p><button class="button accent" data-action="start-mastery">Begin mastery check →</button></div><div class="focus-icon">✓</div></div>`;
   const selectedId = ids.includes(practiceDomain) ? practiceDomain : ids[0]; practiceDomain = selectedId;
   const selected = domain(selectedId); const intervention = ensureIntervention(selectedId);
+  const focusTag = intervention.focusTags?.[0] || '';
+  const guidance = MISCONCEPTION_GUIDANCE[focusTag] || { label: selected.name, lesson: selected.lesson, tip: selected.tip };
   const completeCount = ids.filter((id) => state.interventions[id]?.complete && state.interventions[id]?.round === currentRound()).length;
   if (intervention.complete) {
     const allComplete = practiceComplete();
@@ -541,7 +666,7 @@ function practiceView() {
   const step = intervention.steps[intervention.stepIndex];
   if (!step) return `${journey()}<div class="empty-state"><h2>This skill needs instructor review.</h2><p>No unused item is available for the next learning stage.</p></div>`;
   const item = BANK_BY_ID[step.itemId]; const fallback = step.fallback ? fallbackRepair(item) : null;
-  return `${journey()}<div class="view-header"><div><p class="eyebrow">Targeted learning · Round ${currentRound()}</p><h1>Your learning studio.</h1><p class="subhead">Practice is organized by the same five course skills. Only skills identified by your diagnostic or latest mastery check are assigned.</p></div><span class="pill">${completeCount} of ${ids.length} skills complete</span></div>${practiceDomainList(ids, selectedId)}<div class="stage-progress">${intervention.steps.map((practiceStep, index) => `<span class="${index < intervention.stepIndex ? 'complete' : index === intervention.stepIndex ? 'current' : ''}">${index < intervention.stepIndex ? '✓' : index + 1} ${stageName(practiceStep.stage)}</span>`).join('')}</div><div class="practice-grid"><article class="lesson-card"><p class="eyebrow">Mini lesson · Skill ${selectedId.toUpperCase()}</p><h2>${esc(selected.name)}</h2><p>${esc(selected.lesson)}</p><div class="plain-language-tip"><strong>Try this check</strong>${esc(selected.tip)}</div><ul><li>Read the entire word group.</li><li>Find who or what it is about.</li><li>Find the main verb and decide whether the thought can stand alone.</li></ul></article><article class="practice-question"><p class="eyebrow">${esc(stageName(step.stage))} task</p>${questionPrompt(item, step.fallback ? 'Choose the revision that best completes the thought.' : '')}${step.fallback ? choiceControl(fallback.choices, step.fallbackAnswer, 'fallback') : responseControl(item, step.answer)}<div id="practice-feedback">${step.feedback ? feedbackBox(step.result, step.feedback) : ''}</div><div class="button-row"><button class="button accent" data-action="check-practice">Check my work →</button></div></article></div>`;
+  return `${journey()}<div class="view-header"><div><p class="eyebrow">Targeted learning · Round ${currentRound()}</p><h1>Your learning studio.</h1><p class="subhead">Practice is organized by the same five course skills. Only skills identified by your diagnostic or latest mastery check are assigned.</p></div><span class="pill">${completeCount} of ${ids.length} skills complete</span></div>${practiceDomainList(ids, selectedId)}<div class="stage-progress">${intervention.steps.map((practiceStep, index) => `<span class="${index < intervention.stepIndex ? 'complete' : index === intervention.stepIndex ? 'current' : ''}">${index < intervention.stepIndex ? '✓' : index + 1} ${stageName(practiceStep.stage)}</span>`).join('')}</div><div class="practice-grid"><article class="lesson-card"><p class="eyebrow">Mini lesson · Skill ${selectedId.toUpperCase()}</p><h2>${esc(guidance.label)}</h2><p>${esc(guidance.lesson)}</p><div class="plain-language-tip"><strong>Try this check</strong>${esc(guidance.tip)}</div><ul><li>Read the entire word group.</li><li>Find who or what it is about.</li><li>Find the main verb and decide whether the thought can stand alone.</li></ul></article><article class="practice-question"><p class="eyebrow">${esc(stageName(step.stage))} task</p>${questionPrompt(item, step.fallback ? 'Choose the revision that best completes the thought.' : '')}${step.fallback ? choiceControl(fallback.choices, step.fallbackAnswer, 'fallback') : responseControl(item, step.answer)}<div id="practice-feedback">${step.feedback ? feedbackBox(step.result, step.feedback) : ''}</div><div class="button-row"><button class="button accent" data-action="check-practice">Check my work →</button></div></article></div>`;
 }
 function practiceDomainList(ids, selectedId) {
   const diagnosticById = Object.fromEntries(diagnosticScores().map((score) => [score.id, score]));
@@ -558,8 +683,16 @@ function feedbackBox(evaluation, message) {
   return `<div class="feedback ${status}"><strong>${heading}</strong>${esc(message)}</div>`;
 }
 function compactEvaluation(evaluation) {
-  return { status: evaluation.status, score: evaluation.score, evaluatorVersion: evaluation.evaluatorVersion,
-    family: evaluation.family || null, checks: evaluation.checks, reasons: evaluation.reasons, feedback: evaluation.feedback };
+  return { status: evaluation.status, taskCorrect: Boolean(evaluation.taskCorrect), score: evaluation.score,
+    evaluatorVersion: evaluation.evaluatorVersion,
+    confidence: evaluation.confidence || 'high', family: evaluation.family || null,
+    repairStrategy: evaluation.repairStrategy || null,
+    sentenceComplete: Boolean(evaluation.sentenceComplete),
+    meaningPreserved: Boolean(evaluation.meaningPreserved),
+    target: evaluation.target || null, quality: evaluation.quality || null,
+    checks: evaluation.checks, misconceptionEvidence: evaluation.misconceptionEvidence || [],
+    responseIssues: evaluation.responseIssues || [], advisories: evaluation.advisories || [],
+    reasons: evaluation.reasons, feedback: evaluation.feedback };
 }
 
 function reportAnswer(item, answer) {
@@ -707,7 +840,7 @@ function finishAssessment(event) {
 function completePracticeStep(intervention, step, item, evaluation, viaFallback = false) {
   step.result = compactEvaluation(evaluation); step.feedback = evaluation.feedback;
   record('intervention', `${stageName(step.stage)} completed: ${item.id}`, { round: intervention.round, domainId: item.domain,
-    domain: domain(item.domain).name, stage: step.stage, pool: item.pool, itemId: item.id,
+    domain: domain(item.domain).name, focusTags: intervention.focusTags || [], stage: step.stage, pool: item.pool, itemId: item.id,
     response: viaFallback ? step.fallbackAnswer : step.answer, viaStructuredFallback: viaFallback, evaluation: compactEvaluation(evaluation) });
   if (intervention.stepIndex < intervention.steps.length - 1) {
     intervention.stepIndex += 1; intervention.steps[intervention.stepIndex].feedback = '';
@@ -723,7 +856,8 @@ function checkPractice() {
     }
     const correct = Number(step.fallbackAnswer) === fallback.answer;
     const evaluation = result(correct ? 'correct' : 'incorrect', correct ? 'You selected a revision that completes the thought and preserves the original idea.' : domain(item.domain).feedback,
-      { structuredFallbackCorrect: correct }, correct ? [] : [domain(item.domain).feedback]);
+      { structuredFallbackCorrect: correct }, correct ? [] : [domain(item.domain).feedback],
+      { misconceptionEvidence: structuredEvidence(item, correct, intervention.focusTags?.[0] || '', 'strong') });
     if (correct) completePracticeStep(intervention, step, item, evaluation, true);
     else { step.attempts += 1; intervention.unsuccessfulAttempts += 1; step.result = compactEvaluation(evaluation); step.feedback = evaluation.feedback; saveState(); render(); }
     return;
@@ -737,13 +871,14 @@ function checkPractice() {
   if (evaluation.status === 'needsReview') {
     step.reviewCount += 1;
     if (step.stage === 'Verification') {
-      const alternate = nextUnseenItem(item.domain, 'Verification', intervention.steps.map((entry) => entry.itemId));
+      const alternate = nextUnseenItem(item.domain, 'Verification', intervention.steps.map((entry) => entry.itemId), intervention.focusTags || []);
       if (alternate) {
         const oldId = step.itemId; step.itemId = alternate.id; step.answer = null; step.result = null; step.feedback = '';
         record('alternate', `Verification item ${oldId} replaced with unseen item ${alternate.id}`, { domainId: item.domain, oldId, newId: alternate.id });
         render(); showToast('An unseen verification task is ready.'); return;
       }
-      step.feedback = 'The local checker cannot score this response confidently, and no unseen verification item remains. Ask your instructor to review this skill.';
+      step.fallback = true; step.fallbackAnswer = null;
+      step.feedback = 'Choose the best revision so the skill can be confirmed without relying on the open-text checker.';
     } else if (step.reviewCount >= 2) {
       step.fallback = true; step.fallbackAnswer = null;
       step.feedback = 'Choose the best revision so the skill can be checked without open-text uncertainty.';

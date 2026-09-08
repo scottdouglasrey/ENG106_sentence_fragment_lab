@@ -1,14 +1,14 @@
-const CACHE_NAME = 'sentence-fragment-lab-v7';
+const CACHE_NAME = 'sentence-fragment-lab-v9-strategy-feedback';
 const APP_SHELL = [
   './',
   './index.html',
   './styles.css?v=20260906-2',
-  './app.js?v=20260906-2',
-  './question-bank.js',
-  './evaluation-rules.js',
-  './open-text-evaluator.js',
+  './app.js?v=20260908-6',
+  './question-bank.js?v=20260908-6',
+  './evaluation-rules.js?v=20260908-6',
+  './open-text-evaluator.js?v=20260908-6',
   './tests/evaluator-tests.html',
-  './tests/evaluator-tests.js',
+  './tests/evaluator-tests.js?v=20260908-6',
   './manifest.webmanifest',
   './assets/app-icon.svg',
   './assets/BYUI_logo_white.png',
