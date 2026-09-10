@@ -1,9 +1,9 @@
-const CACHE_NAME = 'sentence-fragment-lab-v9-strategy-feedback';
+const CACHE_NAME = 'sentence-fragment-lab-v10-branching-reasons';
 const APP_SHELL = [
   './',
   './index.html',
-  './styles.css?v=20260906-2',
-  './app.js?v=20260908-6',
+  './styles.css?v=20260910-1',
+  './app.js?v=20260910-1',
   './question-bank.js?v=20260908-6',
   './evaluation-rules.js?v=20260908-6',
   './open-text-evaluator.js?v=20260908-6',

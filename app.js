@@ -3,7 +3,7 @@ const BANK = window.QUESTION_BANK;
 const RULES = window.EVALUATION_RULES;
 const LOCAL_EVALUATOR = window.OpenTextEvaluator;
 const STORAGE_KEY = 'fragment-lab-state';
-const DATA_VERSION = 'v6-strategy-aware-local-evaluation';
+const DATA_VERSION = 'v7-branching-reasons-locked-assessments';
 const MASTERY_THRESHOLD = 75;
 const INITIAL_MASTERY_ITEMS_PER_SKILL = 4;
 
@@ -89,6 +89,16 @@ function classificationAnswer(rubric) {
   return /^\s*complete sentence/i.test(String(rubric || '')) ? 0 : 1;
 }
 
+function reasonChoiceClassification(item) {
+  const prompt = String(item.prompt || '').toLowerCase();
+  const rubric = String(item.rubric || '').toLowerCase();
+  if (/not a complete sentence|why this is (?:still )?a fragment|if not, identify what is missing/.test(prompt)) return 1;
+  if (/why this is (?:a )?complete|complete sentence even though|too short to be a sentence/.test(prompt)) return 0;
+  if (/^\s*fragment\b/.test(rubric)) return 1;
+  if (/complete independent clause|stands independently|is an independent clause/.test(rubric)) return 0;
+  return classificationAnswer(item.rubric);
+}
+
 function misconceptionTags(item) {
   return String(item.misconceptions || '').split(/\s*;\s*/).map((tag) => tag.trim()).filter(Boolean);
 }
@@ -117,64 +127,100 @@ function answerFromOptions(rubric, choices) {
 
 function reasonText(item, complete) {
   const evidence = `${item.rubric} ${item.family} ${item.misconceptions}`.toLowerCase();
-  if (item.domain === 'd') {
-    return complete
-      ? 'The phrase adds detail, and the rest of the sentence expresses a complete thought.'
-      : 'The words add detail but do not form a complete thought with a subject and main verb.';
+  const stimulus = String(item.prompt || '').split(/\n\s*\n/).at(-1).trim().toLowerCase();
+  if (complete) {
+    if (item.domain === 'b') return 'It includes a subject and a separate main verb that completes the thought.';
+    if (item.domain === 'c') return 'The dependent words are attached to a complete thought that can stand alone.';
+    if (item.domain === 'd') return 'The opening phrase adds detail, and the rest of the sentence expresses a complete thought.';
+    return 'It has a subject, a main verb, and a complete thought.';
   }
-  if (item.domain === 'c') {
-    return complete
-      ? 'Any dependent words are connected to a complete thought that can stand alone.'
-      : 'A word such as because, although, when, which, or if leaves the thought unfinished.';
-  }
-  if (item.domain === 'b' && /missing subject|lacks? (a )?subject/.test(evidence)) {
+  if (item.domain === 'b' && /missing subject|lacks? (a )?subject|no grammatical subject/.test(evidence)) {
     return 'It does not say who or what performs the action.';
   }
-  if (item.domain === 'b' || /predicate|main finite verb|missing verb|lacks? (a )?(main )?verb/.test(evidence)) {
-    return complete
-      ? 'It has a subject and a main verb that completes the thought.'
-      : 'It has a subject, but it does not tell what that subject does or is.';
+  if (item.domain === 'b') return 'It names who or what the words are about, but it does not include a main verb that completes the thought.';
+  if (item.domain === 'c' && /^(who|which|that)\b/.test(stimulus)) {
+    return 'It begins with who, which, or that and only describes another word; it does not make a complete statement by itself.';
   }
-  return complete
-    ? 'It has a subject, a main verb, and a complete thought.'
-    : 'It does not express a complete thought that can stand alone.';
+  if (item.domain === 'c') return 'A word such as because, although, when, or if makes the thought depend on another complete thought.';
+  if (item.domain === 'd' && /^to\s+\w+/.test(stimulus)) {
+    return 'The to + verb words explain a purpose but do not make a complete statement by themselves.';
+  }
+  if (item.domain === 'd' && /^(\w+ing|confused|relieved|after|before)\b/.test(stimulus)) {
+    return 'The opening words add an action or detail but do not include a subject and main verb that complete the thought.';
+  }
+  if (item.domain === 'd') return 'The words add detail but do not form a complete thought with a subject and main verb.';
+  return 'It does not express a complete thought that can stand alone.';
 }
 
-function buildReasonTask(item) {
-  const complete = classificationAnswer(item.rubric) === 0;
-  const correct = reasonText(item, complete);
-  const catalog = [
-    { text: 'It is complete because it begins with a capital letter and ends with punctuation.', tag: 'A4_PUNCTUATION_HEURISTIC' },
-    { text: 'Its length determines whether it is a complete sentence.', tag: 'A3_LENGTH_HEURISTIC' },
-    { text: 'Any word ending in -ing automatically serves as the sentence’s main verb.', tag: item.domain === 'b' ? 'B3_VERBAL_AS_PREDICATE' : 'D1_ING_EQUALS_VERB' },
-    { text: 'It names a person, place, or thing, so no main action is needed.', tag: 'B2_MISSING_PREDICATE' },
-    { text: 'The action is present, so it does not need to identify who or what performs it.', tag: 'B1_MISSING_SUBJECT' },
-    { text: 'A word such as because or although automatically makes the word group complete.', tag: 'C2_SUBORDINATOR_UNRECOGNIZED' },
-    { text: 'Any word group with a subject and verb can stand alone.', tag: 'C1_SUBJECT_VERB_EQUALS_SENTENCE' },
-    { text: 'A clause beginning with who, which, or that can always stand alone.', tag: 'C4_RELATIVE_CLAUSE_COMPLETE' },
-    { text: 'A to + verb phrase supplies the complete main action by itself.', tag: 'D2_INFINITIVE_EQUALS_PREDICATE' },
-    { text: 'Descriptive details can stand alone without a subject and main verb.', tag: 'D3_DESCRIPTIVE_DETAIL_COMPLETE' }
+function reasonDistractors(item, complete) {
+  if (complete) {
+    const byDomain = {
+      a: [
+        { text: 'It is complete because it begins with a capital letter and ends with punctuation.', tag: 'A4_PUNCTUATION_HEURISTIC' },
+        { text: 'It is complete because it is long enough to count as a sentence.', tag: 'A3_LENGTH_HEURISTIC' }
+      ],
+      b: [
+        { text: 'Any word ending in -ing automatically serves as the sentence’s main verb.', tag: 'B3_VERBAL_AS_PREDICATE' },
+        { text: 'It names who or what the words are about, so no main verb is needed.', tag: 'B2_MISSING_PREDICATE' }
+      ],
+      c: [
+        { text: 'Any word group with a subject and verb can stand alone, even when a connecting word leaves the thought unfinished.', tag: 'C1_SUBJECT_VERB_EQUALS_SENTENCE' },
+        { text: 'A word such as because or although automatically makes the word group complete.', tag: 'C2_SUBORDINATOR_UNRECOGNIZED' }
+      ],
+      d: [
+        { text: 'Any word ending in -ing automatically supplies the main verb needed for a sentence.', tag: 'D1_ING_EQUALS_VERB' },
+        { text: 'A to + verb phrase can stand alone as a complete sentence.', tag: 'D2_INFINITIVE_EQUALS_PREDICATE' }
+      ]
+    };
+    return byDomain[item.domain] || byDomain.a;
+  }
+  const evidence = `${item.rubric} ${item.family}`.toLowerCase();
+  const stimulus = String(item.prompt || '').split(/\n\s*\n/).at(-1).trim().toLowerCase();
+  if (item.domain === 'b') {
+    const missingSubject = /missing subject|lacks? (a )?subject|no grammatical subject/.test(evidence);
+    return missingSubject ? [
+      { text: 'It names who or what the words are about but does not include a main verb.', tag: 'B2_MISSING_PREDICATE' },
+      { text: 'It is a fragment because it does not end with the correct punctuation.', tag: 'A4_PUNCTUATION_HEURISTIC' }
+    ] : [
+      { text: 'It includes an action but does not identify who or what performs it.', tag: 'B1_MISSING_SUBJECT' },
+      { text: 'It is a fragment because it is too short to be a sentence.', tag: 'A3_LENGTH_HEURISTIC' }
+    ];
+  }
+  if (item.domain === 'c') return [
+    { text: 'It includes an action but does not identify who or what performs it.', tag: 'B1_MISSING_SUBJECT' },
+    { text: 'It names who or what the words are about but does not include a verb.', tag: 'B2_MISSING_PREDICATE' }
   ];
-  const domainPriority = {
-    a: ['A4_', 'A3_', 'A1_', 'B2_'],
-    b: ['B1_', 'B2_', 'B3_', 'A2_', 'A4_'],
-    c: ['C1_', 'C2_', 'C4_', 'C3_', 'A1_'],
-    d: ['D1_', 'D2_', 'D3_', 'B3_', 'A1_']
-  }[item.domain] || [];
-  const distractors = catalog.filter((entry) => entry.text !== correct)
-    .sort((left, right) => {
-      const leftRank = domainPriority.findIndex((prefix) => left.tag.startsWith(prefix));
-      const rightRank = domainPriority.findIndex((prefix) => right.tag.startsWith(prefix));
-      return (leftRank < 0 ? 99 : leftRank) - (rightRank < 0 ? 99 : rightRank);
-    }).slice(0, 3);
-  const entries = [{ text: correct, tag: '', correct: true }, ...distractors];
-  const offset = [...String(item.id || '')].reduce((total, char) => total + char.charCodeAt(0), 0) % entries.length;
+  if (item.domain === 'd' && /^to\s+\w+/.test(stimulus)) return [
+    { text: 'It is a fragment because an -ing word cannot serve as a complete main verb.', tag: 'D1_ING_EQUALS_VERB' },
+    { text: 'It is a fragment because a word such as because or although leaves the thought unfinished.', tag: 'C2_SUBORDINATOR_UNRECOGNIZED' }
+  ];
+  if (item.domain === 'd') return [
+    { text: 'It is a fragment because a to + verb phrase cannot stand alone.', tag: 'D2_INFINITIVE_EQUALS_PREDICATE' },
+    { text: 'It is a fragment because a word such as because or although leaves the thought unfinished.', tag: 'C2_SUBORDINATOR_UNRECOGNIZED' }
+  ];
+  return [
+    { text: 'It is a fragment because it is too short to be a sentence.', tag: 'A3_LENGTH_HEURISTIC' },
+    { text: 'It is a fragment because it does not end with the correct punctuation.', tag: 'A4_PUNCTUATION_HEURISTIC' }
+  ];
+}
+
+function buildReasonTask(item, classification) {
+  const complete = Number(classification) === 0;
+  const correct = reasonText(item, complete);
+  const entries = [{ text: correct, tag: '', correct: true }, ...reasonDistractors(item, complete)];
+  const seed = `${item.id || ''}-${complete ? 'complete' : 'fragment'}`;
+  const offset = [...seed].reduce((total, char) => total + char.charCodeAt(0), 0) % entries.length;
   const rotated = entries.map((_, index) => entries[(index + offset) % entries.length]);
   return {
     choices: rotated.map((entry) => entry.text),
     answer: rotated.findIndex((entry) => entry.correct),
     evidenceTags: rotated.map((entry) => entry.tag)
   };
+}
+
+function reasonTaskFor(item, classification) {
+  if (item.responseMode === 'classifyReason') return item.reasonTasks?.[Number(classification)] || null;
+  return item.reasonTask || null;
 }
 
 function cleanPrompt(item) {
@@ -230,7 +276,11 @@ function normalizeBankItem(source, isParagraph = false) {
     notes: source['Instructor Notes'] || '',
     evaluation: RULES?.items?.[source.ID] || null
   };
-  if (responseMode === 'reasonChoice' || responseMode === 'classifyReason') item.reasonTask = buildReasonTask(item);
+  if (responseMode === 'reasonChoice') item.reasonTask = buildReasonTask(item, reasonChoiceClassification(item));
+  if (responseMode === 'classifyReason') {
+    item.reasonTasks = { 0: buildReasonTask(item, 0), 1: buildReasonTask(item, 1) };
+    item.reasonTask = item.reasonTasks[item.answer];
+  }
   item.displayPrompt = cleanPrompt(item);
   return item;
 }
@@ -259,9 +309,9 @@ function defaultState() {
     evaluatorVersion: LOCAL_EVALUATOR.version,
     view: 'overview',
     diagnosticItemIds: [...DEFAULT_DIAGNOSTIC_IDS],
-    diagnosticAnswers: {}, diagnosticResults: {}, diagnosticComplete: false,
+    diagnosticAnswers: {}, diagnosticLocked: {}, diagnosticResults: {}, diagnosticComplete: false,
     interventions: {},
-    masteryItemIds: [], masteryAnswers: {}, masteryResults: {}, masteryAttempts: [], masteryEvidence: {},
+    masteryItemIds: [], masteryAnswers: {}, masteryLocked: {}, masteryResults: {}, masteryAttempts: [], masteryEvidence: {},
     masteryLoops: [], masteryReviewHistory: [], masteryComplete: false,
     events: [], startedAt: new Date().toISOString()
   };
@@ -275,7 +325,8 @@ function mapLegacyAnswers(answers, ids) {
     const item = BANK_BY_ID[id];
     if (!item) return [id, value];
     if (item.responseMode === 'classifyReason' && typeof value !== 'object') {
-      return [id, { classification: Number(value), reason: item.reasonTask.answer, migrated: true }];
+      const classification = Number(value);
+      return [id, { classification, reason: reasonTaskFor(item, classification)?.answer, migrated: true }];
     }
     if (item.responseMode === 'reasonChoice' && typeof value !== 'number') {
       return [id, item.reasonTask.answer];
@@ -298,8 +349,12 @@ function migrateState(saved) {
     dataVersion: DATA_VERSION, bankVersion: BANK.version, evaluatorVersion: LOCAL_EVALUATOR.version,
     diagnosticItemIds: diagnosticIds,
     diagnosticAnswers: mapLegacyAnswers(saved.diagnosticAnswers, diagnosticIds),
+    diagnosticLocked: saved.diagnosticLocked || (saved.diagnosticComplete
+      ? Object.fromEntries(diagnosticIds.map((id) => [id, true])) : {}),
     masteryItemIds: oldMasteryIds,
     masteryAnswers: mapLegacyAnswers(saved.masteryAnswers, oldMasteryIds || LEGACY_MASTERY_IDS),
+    masteryLocked: saved.masteryLocked || (saved.masteryComplete
+      ? Object.fromEntries(oldMasteryIds.map((id) => [id, true])) : {}),
     diagnosticResults: saved.diagnosticResults || {}, masteryResults: saved.masteryResults || {},
     masteryAttempts: Array.isArray(saved.masteryAttempts) ? saved.masteryAttempts : [],
     masteryEvidence: saved.masteryEvidence || {}, masteryLoops: Array.isArray(saved.masteryLoops) ? saved.masteryLoops : [],
@@ -416,10 +471,11 @@ function evaluateAnswer(item, answer) {
       { misconceptionEvidence: structuredEvidence(item, correct, selectedTag, selectedTag ? 'strong' : 'moderate') });
   }
   if (item.responseMode === 'classifyReason') {
+    const reasonTask = reasonTaskFor(item, answer?.classification);
     const classificationCorrect = Number(answer?.classification) === item.answer;
-    const reasonCorrect = Number(answer?.reason) === item.reasonTask.answer;
+    const reasonCorrect = Boolean(reasonTask) && Number(answer?.reason) === reasonTask.answer;
     const correct = classificationCorrect && reasonCorrect;
-    const selectedTag = item.reasonTask.evidenceTags?.[Number(answer?.reason)] || '';
+    const selectedTag = reasonTask?.evidenceTags?.[Number(answer?.reason)] || '';
     return result(correct ? 'correct' : 'incorrect', correct ? 'Your decision and supporting reason both match the sentence evidence.' : domain(item.domain).feedback,
       { classificationCorrect, reasonCorrect }, correct ? [] : [
         !classificationCorrect ? 'Reconsider whether the words express a complete thought.' : '',
@@ -550,7 +606,7 @@ function prepareMasterySet(domainIds = DOMAINS.map((skill) => skill.id)) {
     const available = itemsFor('Mastery assessment', domainId).filter((item) => !excluded.has(item.id));
     selected.push(...available.slice(0, INITIAL_MASTERY_ITEMS_PER_SKILL).map((item) => item.id));
   });
-  state.masteryItemIds = selected; state.masteryAnswers = {}; state.masteryResults = {}; saveState();
+  state.masteryItemIds = selected; state.masteryAnswers = {}; state.masteryLocked = {}; state.masteryResults = {}; saveState();
   return selected.length > 0;
 }
 function finalMasteryScores() {
@@ -596,9 +652,9 @@ function overviewView() {
   return `${journey()}<div class="hero"><div class="hero-copy"><p class="eyebrow">Sentence Fragment Lab</p><h1>Make every sentence<br/>complete.</h1><p class="subhead">Spot, repair, and prevent sentence fragments through a learning path that responds to your work.</p></div><div class="hero-note"><strong>Your work stays on this device.</strong> No account is required. Progress and report data are stored only in this browser.</div></div><div class="grid-3"><div class="card metric-card"><span class="metric-label">Diagnostic</span><div class="metric-value">${diagnosticScore}</div><div class="metric-detail">${state.diagnosticComplete ? 'Starting point recorded' : 'Not started'}</div></div><div class="card metric-card accent"><span class="metric-label">Targeted skills completed</span><div class="metric-value">${completed}<small> / ${required.length}</small></div><div class="metric-detail">Guided → independent → verification</div></div><div class="card metric-card dark"><span class="metric-label">Mastery</span><div class="metric-value">${masteryScore}</div><div class="metric-detail">${state.masteryComplete ? 'All five skills mastered' : 'Protected final evidence'}</div></div></div><div class="section-head"><div><h2>What happens next?</h2><p>Your next step is based on your saved progress.</p></div></div><div class="overview-grid"><div class="focus-card"><div><p class="eyebrow">${next[0]}</p><h3>${next[1]}</h3><p>${next[2]}</p><button class="button accent" data-action="overview-next" data-view="${next[4]}">${next[3]} <span>→</span></button></div><div class="focus-icon">${state.masteryComplete ? '✓' : '◎'}</div></div><div class="card activity-card"><h3>Recent activity</h3>${recentActivity()}</div></div>`;
 }
 
-function choiceControl(choices, selected, field = 'choice') {
+function choiceControl(choices, selected, field = 'choice', disabled = false) {
   const hasSelection = selected !== null && selected !== undefined && selected !== '';
-  return `<div class="choice-list">${choices.map((choice, index) => `<label class="choice ${hasSelection && Number(selected) === index ? 'selected' : ''}"><input type="radio" name="${field}" data-answer-field="${field}" value="${index}" ${hasSelection && Number(selected) === index ? 'checked' : ''}/><span>${esc(choice)}</span></label>`).join('')}</div>`;
+  return `<div class="choice-list">${choices.map((choice, index) => `<label class="choice ${hasSelection && Number(selected) === index ? 'selected' : ''} ${disabled ? 'locked' : ''}"><input type="radio" name="${field}" data-answer-field="${field}" value="${index}" ${hasSelection && Number(selected) === index ? 'checked' : ''} ${disabled ? 'disabled' : ''}/><span>${esc(choice)}</span></label>`).join('')}</div>`;
 }
 function questionPrompt(item, override = '') {
   const raw = String(override || item.displayPrompt || '').trim();
@@ -607,16 +663,23 @@ function questionPrompt(item, override = '') {
   const stimulus = parts.join('\n\n').trim();
   return `<div class="question-prompt">${esc(instruction)}</div>${stimulus ? `<div class="question-stimulus">${esc(stimulus)}</div>` : ''}`;
 }
-function responseControl(item, answer) {
-  if (item.responseMode === 'choice') return choiceControl(item.choices, answer);
-  if (item.responseMode === 'reasonChoice') return `<fieldset class="response-group"><legend>Choose the best explanation.</legend>${choiceControl(item.reasonTask.choices, answer, 'reason')}</fieldset>`;
-  if (item.responseMode === 'classifyReason') return `<fieldset class="response-group"><legend>1. Decide whether the words form a complete sentence.</legend>${choiceControl(item.choices, answer?.classification, 'classification')}</fieldset><fieldset class="response-group"><legend>2. Choose the best reason.</legend>${choiceControl(item.reasonTask.choices, answer?.reason, 'reason')}</fieldset>`;
-  if (item.responseMode === 'classifyRepair') return `<fieldset class="response-group"><legend>1. Decide whether the words form a complete sentence.</legend>${choiceControl(item.choices, answer?.classification, 'classification')}</fieldset><label class="response-label" for="repair-response">2. If it is a fragment, revise it into a complete sentence.</label><textarea id="repair-response" class="constructed-response" data-answer-field="text" placeholder="Type your revision…">${esc(answer?.text || '')}</textarea>`;
+function responseControl(item, answer, locked = false) {
+  if (item.responseMode === 'choice') return choiceControl(item.choices, answer, 'choice', locked);
+  if (item.responseMode === 'reasonChoice') return `<fieldset class="response-group" ${locked ? 'disabled' : ''}><legend>Choose the best explanation.</legend>${choiceControl(item.reasonTask.choices, answer, 'reason', locked)}</fieldset>`;
+  if (item.responseMode === 'classifyReason') {
+    const classificationSelected = answer?.classification !== undefined && answer?.classification !== null;
+    const reasonTask = classificationSelected ? reasonTaskFor(item, answer.classification) : null;
+    const reasonStep = reasonTask
+      ? `<fieldset class="response-group" ${locked ? 'disabled' : ''}><legend>2. Why is it a ${Number(answer.classification) === 0 ? 'complete sentence' : 'fragment'}?</legend>${choiceControl(reasonTask.choices, answer?.reason, 'reason', locked)}</fieldset>`
+      : '<div class="reason-gate" role="status">Select “Complete sentence” or “Fragment” to see the explanation choices.</div>';
+    return `<fieldset class="response-group" ${locked ? 'disabled' : ''}><legend>1. Is this a complete sentence or a fragment?</legend>${choiceControl(item.choices, answer?.classification, 'classification', locked)}</fieldset>${reasonStep}`;
+  }
+  if (item.responseMode === 'classifyRepair') return `<fieldset class="response-group" ${locked ? 'disabled' : ''}><legend>1. Decide whether the words form a complete sentence.</legend>${choiceControl(item.choices, answer?.classification, 'classification', locked)}</fieldset><label class="response-label" for="repair-response">2. If it is a fragment, revise it into a complete sentence.</label><textarea id="repair-response" class="constructed-response" data-answer-field="text" placeholder="Type your revision…" ${locked ? 'disabled' : ''}>${esc(answer?.text || '')}</textarea>`;
   if (item.responseMode === 'paragraphRepair') {
     const selected = answer?.selected || [];
-    return `<div class="context-copy">${esc(item.paragraph)}</div><fieldset class="response-group fragment-picker"><legend>1. Select every sentence fragment.</legend>${paragraphSentences(item).map((sentence, index) => `<button type="button" class="sentence-option ${selected.includes(index) ? 'selected' : ''}" data-action="toggle-sentence" data-sentence-index="${index}" aria-pressed="${selected.includes(index)}"><span>${selected.includes(index) ? '✓' : index + 1}</span>${esc(sentence)}</button>`).join('')}</fieldset><label class="response-label" for="paragraph-response">2. Revise the paragraph so each sentence is complete. Keep the original meaning.</label><textarea id="paragraph-response" class="constructed-response paragraph-response" data-answer-field="text" placeholder="Type your revised paragraph…">${esc(answer?.text || '')}</textarea>`;
+    return `<div class="context-copy">${esc(item.paragraph)}</div><fieldset class="response-group fragment-picker" ${locked ? 'disabled' : ''}><legend>1. Select every sentence fragment.</legend>${paragraphSentences(item).map((sentence, index) => `<button type="button" class="sentence-option ${selected.includes(index) ? 'selected' : ''}" data-action="toggle-sentence" data-sentence-index="${index}" aria-pressed="${selected.includes(index)}" ${locked ? 'disabled' : ''}><span>${selected.includes(index) ? '✓' : index + 1}</span>${esc(sentence)}</button>`).join('')}</fieldset><label class="response-label" for="paragraph-response">2. Revise the paragraph so each sentence is complete. Keep the original meaning.</label><textarea id="paragraph-response" class="constructed-response paragraph-response" data-answer-field="text" placeholder="Type your revised paragraph…" ${locked ? 'disabled' : ''}>${esc(answer?.text || '')}</textarea>`;
   }
-  return `<p class="response-hint">Write a complete revision. Keep the original action and key details.</p><textarea class="constructed-response" data-answer-field="text" placeholder="Type your response…">${esc(answer || '')}</textarea>`;
+  return `<p class="response-hint">Write a complete revision. Keep the original action and key details.</p><textarea class="constructed-response" data-answer-field="text" placeholder="Type your response…" ${locked ? 'disabled' : ''}>${esc(answer || '')}</textarea>`;
 }
 
 function assessmentView(kind) {
@@ -629,14 +692,18 @@ function assessmentView(kind) {
   if (!items.length) return `${journey()}<div class="empty-state"><h2>No unseen mastery items remain.</h2><p>The protected item pool for the skills needing reassessment has been exhausted. Ask the instructor to review prerequisite skills or provide a new assessment form.</p><button class="button secondary" data-view="practice">Return to learning studio</button></div>`;
   currentQuestion = Math.min(currentQuestion, items.length - 1);
   const answers = answersFor(kind); const item = items[currentQuestion];
+  const lockedAnswers = state[`${kind}Locked`] || {};
+  const locked = Boolean(lockedAnswers[item.id]);
+  const currentComplete = answerComplete(item, answers[item.id]);
   const answered = items.filter((question) => answerComplete(question, answers[question.id])).length;
   const label = isMastery && state.masteryLoops.length ? 'Mastery reassessment' : isMastery ? 'Mastery assessment' : 'Diagnostic assessment';
   const intro = isMastery ? `This protected check measures the skills that still need mastery evidence. A skill is mastered at ${MASTERY_THRESHOLD}% or higher.`
     : 'Use your best judgment. The diagnostic chooses your learning path and does not count as mastery.';
   return `${journey()}<div class="view-header"><div><p class="eyebrow">${label}</p><h1>${isMastery ? 'Show what you know.' : 'Find your starting point.'}</h1><p class="subhead">${intro}</p></div><span class="pill ${isMastery ? 'accent' : ''}">${items.length} tasks · untimed</span></div><div class="assessment-layout"><aside class="question-list"><h3>Your progress</h3>${items.map((question, index) => {
     const complete = answerComplete(question, answers[question.id]);
-    return `<button class="q-nav ${index === currentQuestion ? 'active' : ''} ${complete ? 'answered' : ''}" data-q="${index}"><b>${complete ? '✓' : String(index + 1).padStart(2, '0')}</b><span>${esc(domain(question.domain).name)}<small>${complete ? 'Answered' : 'Not answered'}</small></span></button>`;
-  }).join('')}</aside><section class="question-card"><div class="question-meta"><span class="pill gray">Skill ${item.domain.toUpperCase()} · ${esc(domain(item.domain).name)}</span></div>${questionPrompt(item)}${responseControl(item, answers[item.id])}<div class="question-footer"><small>${answered} of ${items.length} answered</small><div class="button-row no-margin"><button class="button secondary" data-action="previous" ${currentQuestion === 0 ? 'disabled' : ''}>← Back</button>${currentQuestion < items.length - 1 ? '<button class="button" data-action="next">Save & next →</button>' : `<button class="button accent" data-action="finish-assessment" data-kind="${kind}">${isMastery ? 'Finish mastery check' : 'See my learning path'} →</button>`}</div></div></section></div>`;
+    const saved = Boolean(lockedAnswers[question.id]);
+    return `<button class="q-nav ${index === currentQuestion ? 'active' : ''} ${complete ? 'answered' : ''}" data-q="${index}"><b>${complete ? '✓' : String(index + 1).padStart(2, '0')}</b><span>${esc(domain(question.domain).name)}<small>${saved ? 'Saved · locked' : complete ? 'Answered · not saved' : 'Not answered'}</small></span></button>`;
+  }).join('')}</aside><section class="question-card"><div class="question-meta"><span class="pill gray">Skill ${item.domain.toUpperCase()} · ${esc(domain(item.domain).name)}</span></div>${questionPrompt(item)}${responseControl(item, answers[item.id], locked)}${locked ? '<div class="saved-answer-note" role="status"><strong>Answer saved.</strong> You may review this response, but it cannot be changed.</div>' : ''}<div class="question-footer"><small>${answered} of ${items.length} answered</small><div class="button-row no-margin"><button class="button secondary" data-action="previous" ${currentQuestion === 0 ? 'disabled' : ''}>← Back</button>${currentQuestion < items.length - 1 ? `<button class="button" data-action="next" ${currentComplete ? '' : 'disabled'}>${locked ? 'Next' : 'Save & next'} →</button>` : `<button class="button accent" data-action="finish-assessment" data-kind="${kind}" ${currentComplete ? '' : 'disabled'}>${isMastery ? 'Finish mastery check' : 'See my learning path'} →</button>`}</div></div></section></div>`;
 }
 
 function stageName(stage) { return { 'Guided practice': 'Guided', 'Independent practice': 'Independent', Verification: 'Verification' }[stage] || stage; }
@@ -699,7 +766,10 @@ function reportAnswer(item, answer) {
   if (answer === undefined || answer === null || answer === '') return 'Not answered';
   if (item.responseMode === 'choice') return item.choices[Number(answer)] || `Option ${Number(answer) + 1}`;
   if (item.responseMode === 'reasonChoice') return item.reasonTask.choices[Number(answer)] || 'Explanation selected';
-  if (item.responseMode === 'classifyReason') return `${item.choices[Number(answer.classification)] || 'No decision'} — ${item.reasonTask.choices[Number(answer.reason)] || 'No reason'}`;
+  if (item.responseMode === 'classifyReason') {
+    const reasonTask = reasonTaskFor(item, answer.classification);
+    return `${item.choices[Number(answer.classification)] || 'No decision'} — ${reasonTask?.choices[Number(answer.reason)] || 'No reason'}`;
+  }
   if (item.responseMode === 'classifyRepair') return `${item.choices[Number(answer.classification)] || 'No decision'} — ${answer.text || 'No repair'}`;
   if (item.responseMode === 'paragraphRepair') return `Selected sentences: ${(answer.selected || []).map((index) => index + 1).join(', ') || 'none'} — ${answer.text || 'No revision'}`;
   return String(answer);
@@ -764,7 +834,8 @@ function render() {
 function currentResponseContext() {
   if (state.view === 'diagnostic' || state.view === 'mastery') {
     const kind = state.view; const item = assessmentItems(kind)[currentQuestion];
-    return { item, get answer() { return state[`${kind}Answers`][item.id]; }, set answer(value) { state[`${kind}Answers`][item.id] = value; } };
+    return { item, kind, get locked() { return Boolean(state[`${kind}Locked`]?.[item.id]); },
+      get answer() { return state[`${kind}Answers`][item.id]; }, set answer(value) { state[`${kind}Answers`][item.id] = value; } };
   }
   if (state.view === 'practice') {
     const intervention = ensureIntervention(practiceDomain); const step = intervention.steps[intervention.stepIndex];
@@ -774,14 +845,32 @@ function currentResponseContext() {
 }
 function updateResponse(field, value) {
   const context = currentResponseContext(); if (!context) return; const mode = context.item.responseMode;
+  if (context.locked) return showToast('This assessment answer has already been saved and cannot be changed.');
   if (mode === 'choice' || mode === 'reasonChoice' || mode === 'text') context.answer = value;
-  else context.answer = { ...(context.answer || {}), [field]: value };
+  else if (mode === 'classifyReason' && field === 'classification') {
+    const previous = context.answer || {};
+    context.answer = Number(previous.classification) === Number(value) ? previous : { classification: value };
+  } else context.answer = { ...(context.answer || {}), [field]: value };
   saveState();
+}
+
+function saveCurrentAssessmentAnswer() {
+  if (state.view !== 'diagnostic' && state.view !== 'mastery') return true;
+  const kind = state.view; const item = assessmentItems(kind)[currentQuestion]; const answer = answersFor(kind)[item.id];
+  if (!answerComplete(item, answer)) {
+    showToast(item.responseMode === 'classifyReason'
+      ? 'Complete both steps before saving this answer.' : 'Complete this task before saving your answer.');
+    return false;
+  }
+  state[`${kind}Locked`] = { ...(state[`${kind}Locked`] || {}), [item.id]: true };
+  saveState(); return true;
 }
 
 function finishAssessment(event) {
   const kind = event.currentTarget.dataset.kind; const items = assessmentItems(kind); const answers = answersFor(kind);
   if (items.some((item) => !answerComplete(item, answers[item.id]))) return showToast(`Complete all ${items.length} tasks before finishing.`);
+  state[`${kind}Locked`] = Object.fromEntries(items.map((item) => [item.id, true]));
+  saveState();
   const rows = assessmentRows(kind, items, answers); const score = overallFromRows(rows); const scores = domainScoresFromRows(rows);
   if (kind === 'diagnostic') {
     state.diagnosticResults = Object.fromEntries(rows.map((row) => [row.item.id, compactEvaluation(row.evaluation)])); state.diagnosticComplete = true;
@@ -803,6 +892,7 @@ function finishAssessment(event) {
         evaluation: compactEvaluation(replacement.evaluation), at: new Date().toISOString() });
       state.masteryItemIds = state.masteryItemIds.map((id) => id === replacement.oldId ? replacement.newId : id);
       delete state.masteryAnswers[replacement.oldId];
+      delete state.masteryLocked[replacement.oldId];
     });
     record('alternate', `${replacements.length} mastery response${replacements.length === 1 ? '' : 's'} received unseen alternate tasks`,
       { replacements: replacements.map(({ oldId, newId }) => ({ oldId, newId })) });
@@ -831,7 +921,7 @@ function finishAssessment(event) {
   const loop = state.masteryLoops.length + 1;
   state.masteryLoops.push({ loop, attempt: attemptNumber, score, at, weakDomainIds, itemIds: items.map((item) => item.id) });
   weakDomainIds.forEach((id) => { delete state.interventions[id]; });
-  state.masteryItemIds = []; state.masteryAnswers = {};
+  state.masteryItemIds = []; state.masteryAnswers = {}; state.masteryLocked = {};
   record('reassessment', `Mastery attempt ${attemptNumber} → targeted relearning`, { attempt: attemptNumber, loop, score, weakDomainIds });
   state.view = 'practice'; currentQuestion = 0; practiceDomain = weakDomainIds[0]; render();
   showToast('A new learning round is ready for the skills needing attention.');
@@ -946,11 +1036,15 @@ function bindEvents() {
     });
   });
   document.querySelectorAll('[data-action="toggle-sentence"]').forEach((button) => button.addEventListener('click', () => {
-    const context = currentResponseContext(); const index = Number(button.dataset.sentenceIndex); const selected = new Set(context.answer?.selected || []);
+    const context = currentResponseContext(); if (context.locked) return showToast('This assessment answer has already been saved and cannot be changed.');
+    const index = Number(button.dataset.sentenceIndex); const selected = new Set(context.answer?.selected || []);
     if (selected.has(index)) selected.delete(index); else selected.add(index);
     context.answer = { ...(context.answer || {}), selected: [...selected].sort((a, b) => a - b) }; saveState(); render();
   }));
-  document.querySelector('[data-action="next"]')?.addEventListener('click', () => { currentQuestion = Math.min(currentQuestion + 1, assessmentItems(state.view).length - 1); render(); });
+  document.querySelector('[data-action="next"]')?.addEventListener('click', () => {
+    if (!saveCurrentAssessmentAnswer()) return;
+    currentQuestion = Math.min(currentQuestion + 1, assessmentItems(state.view).length - 1); render();
+  });
   document.querySelector('[data-action="previous"]')?.addEventListener('click', () => { currentQuestion = Math.max(currentQuestion - 1, 0); render(); });
   document.querySelector('[data-action="finish-assessment"]')?.addEventListener('click', finishAssessment);
   document.querySelectorAll('[data-domain]').forEach((button) => button.addEventListener('click', () => { practiceDomain = button.dataset.domain; render(); }));
@@ -965,5 +1059,6 @@ function bindEvents() {
 }
 
 window.FragmentLab = { evaluateAnswer, answerComplete, normalizeBankItem, targetSentenceIndices,
-  getState: () => structuredClone(state), bank: BANK_ALL, domains: DOMAINS, masteryThreshold: MASTERY_THRESHOLD };
+  reasonTaskFor, responseControl, getState: () => structuredClone(state), bank: BANK_ALL, domains: DOMAINS,
+  masteryThreshold: MASTERY_THRESHOLD };
 render();
