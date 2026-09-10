@@ -43,6 +43,22 @@
   check(sf018.reasonTask.choices[sf018.reasonTask.answer] === 'It has a subject, a main verb, and a complete thought.',
     'SF-018 does not key the structure-based explanation.');
 
+  const sfd008 = lab.bank.find((item) => item.id === 'SFD-008');
+  const sfd029 = lab.bank.find((item) => item.id === 'SFD-029');
+  const expectedMissingPartsChoices = [
+    'This is a complete sentence.',
+    'This is a fragment because it is missing a subject.',
+    'This is a fragment because it has a subject but no complete predicate.'
+  ];
+  check(sfd008?.responseMode === 'choice', 'SFD-008 is not a direct three-choice diagnostic item.');
+  check(JSON.stringify(sfd008?.choices) === JSON.stringify(expectedMissingPartsChoices), 'SFD-008 does not use the balanced missing-parts choices.');
+  check(sfd008?.answer === 2, 'SFD-008 does not key the missing-predicate answer.');
+  check(sfd029?.responseMode === 'choice', 'SFD-029 complete-sentence control is missing.');
+  check(JSON.stringify(sfd029?.choices) === JSON.stringify(expectedMissingPartsChoices), 'SFD-029 does not use the matched choices.');
+  check(sfd029?.answer === 0, 'SFD-029 does not key “This is a complete sentence.”');
+  check(lab.getState().diagnosticItemIds.includes('SFD-029'), 'The matched complete-sentence control is not in the initial diagnostic.');
+  check(lab.bank.length === 234, `Expected 234 total items; found ${lab.bank.length}.`);
+
   if (failures.length) throw new Error(`Assessment interaction tests failed:\n- ${failures.join('\n- ')}`);
   window.ASSESSMENT_INTERACTION_TEST_RESULTS = {
     passed: true,

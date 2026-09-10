@@ -1,10 +1,10 @@
-const CACHE_NAME = 'sentence-fragment-lab-v10-branching-reasons';
+const CACHE_NAME = 'sentence-fragment-lab-v11-balanced-diagnostic';
 const APP_SHELL = [
   './',
   './index.html',
   './styles.css?v=20260910-1',
-  './app.js?v=20260910-1',
-  './question-bank.js?v=20260908-6',
+  './app.js?v=20260910-2',
+  './question-bank.js?v=20260910-2',
   './evaluation-rules.js?v=20260908-6',
   './open-text-evaluator.js?v=20260908-6',
   './tests/evaluator-tests.html',

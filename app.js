@@ -3,7 +3,7 @@ const BANK = window.QUESTION_BANK;
 const RULES = window.EVALUATION_RULES;
 const LOCAL_EVALUATOR = window.OpenTextEvaluator;
 const STORAGE_KEY = 'fragment-lab-state';
-const DATA_VERSION = 'v7-branching-reasons-locked-assessments';
+const DATA_VERSION = 'v8-balanced-missing-parts-diagnostic';
 const MASTERY_THRESHOLD = 75;
 const INITIAL_MASTERY_ITEMS_PER_SKILL = 4;
 
@@ -299,7 +299,10 @@ function selectInitialItems(stage, perSkill) {
   });
 }
 
-const DEFAULT_DIAGNOSTIC_IDS = selectInitialItems('Diagnostic', { a: 2, b: 2, c: 2, d: 2, e: 1 });
+const DEFAULT_DIAGNOSTIC_IDS = [
+  ...selectInitialItems('Diagnostic', { a: 2, b: 2, c: 2, d: 2, e: 1 }),
+  'SFD-029'
+];
 const LEGACY_MASTERY_IDS = selectInitialItems('Mastery assessment', 2);
 
 function defaultState() {
@@ -703,7 +706,7 @@ function assessmentView(kind) {
     const complete = answerComplete(question, answers[question.id]);
     const saved = Boolean(lockedAnswers[question.id]);
     return `<button class="q-nav ${index === currentQuestion ? 'active' : ''} ${complete ? 'answered' : ''}" data-q="${index}"><b>${complete ? '✓' : String(index + 1).padStart(2, '0')}</b><span>${esc(domain(question.domain).name)}<small>${saved ? 'Saved · locked' : complete ? 'Answered · not saved' : 'Not answered'}</small></span></button>`;
-  }).join('')}</aside><section class="question-card"><div class="question-meta"><span class="pill gray">Skill ${item.domain.toUpperCase()} · ${esc(domain(item.domain).name)}</span></div>${questionPrompt(item)}${responseControl(item, answers[item.id], locked)}${locked ? '<div class="saved-answer-note" role="status"><strong>Answer saved.</strong> You may review this response, but it cannot be changed.</div>' : ''}<div class="question-footer"><small>${answered} of ${items.length} answered</small><div class="button-row no-margin"><button class="button secondary" data-action="previous" ${currentQuestion === 0 ? 'disabled' : ''}>← Back</button>${currentQuestion < items.length - 1 ? `<button class="button" data-action="next" ${currentComplete ? '' : 'disabled'}>${locked ? 'Next' : 'Save & next'} →</button>` : `<button class="button accent" data-action="finish-assessment" data-kind="${kind}" ${currentComplete ? '' : 'disabled'}>${isMastery ? 'Finish mastery check' : 'See my learning path'} →</button>`}</div></div></section></div>`;
+  }).join('')}</aside><section class="question-card">${questionPrompt(item)}${responseControl(item, answers[item.id], locked)}${locked ? '<div class="saved-answer-note" role="status"><strong>Answer saved.</strong> You may review this response, but it cannot be changed.</div>' : ''}<div class="question-footer"><small>${answered} of ${items.length} answered</small><div class="button-row no-margin"><button class="button secondary" data-action="previous" ${currentQuestion === 0 ? 'disabled' : ''}>← Back</button>${currentQuestion < items.length - 1 ? `<button class="button" data-action="next" ${currentComplete ? '' : 'disabled'}>${locked ? 'Next' : 'Save & next'} →</button>` : `<button class="button accent" data-action="finish-assessment" data-kind="${kind}" ${currentComplete ? '' : 'disabled'}>${isMastery ? 'Finish mastery check' : 'See my learning path'} →</button>`}</div></div></section></div>`;
 }
 
 function stageName(stage) { return { 'Guided practice': 'Guided', 'Independent practice': 'Independent', Verification: 'Verification' }[stage] || stage; }

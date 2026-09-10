@@ -3576,16 +3576,43 @@ D. The attached file.
 - **Skill:** B - Missing essential parts
 - **Family:** B-D2 missing predicate
 - **Difficulty:** 1-Easy
-- **Type:** Short response
+- **Type:** Multiple choice
 - **Prompt:** ```text
 Is this a complete sentence? If not, identify what is missing.
 
 The new tutoring center beside the library.
 ```
-- **Options:** [blank]
-- **Answer / Rubric:** Fragment; it needs a complete predicate/main assertion.
-- **Misconception Tags:** B2_MISSING_PREDICATE
-- **Instructor Notes:** Direct probe of missing-predicate recognition.
+- **Options:** ```text
+A. This is a complete sentence.
+B. This is a fragment because it is missing a subject.
+C. This is a fragment because it has a subject but no complete predicate.
+```
+- **Answer / Rubric:** C
+- **Misconception Tags:** B1_MISSING_SUBJECT; B2_MISSING_PREDICATE
+- **Instructor Notes:** Direct probe of missing-predicate recognition; matched with SFD-029.
+
+#### SFD-029
+
+- **ID:** SFD-029
+- **Stage:** Diagnostic
+- **Pool:** Diagnostic reserve
+- **Skill:** B - Missing essential parts
+- **Family:** B-D2 complete predicate control
+- **Difficulty:** 1-Easy
+- **Type:** Multiple choice
+- **Prompt:** ```text
+Is this a complete sentence? If not, identify what is missing.
+
+The new tutoring center beside the library offers evening appointments.
+```
+- **Options:** ```text
+A. This is a complete sentence.
+B. This is a fragment because it is missing a subject.
+C. This is a fragment because it has a subject but no complete predicate.
+```
+- **Answer / Rubric:** A
+- **Misconception Tags:** B1_MISSING_SUBJECT; B2_MISSING_PREDICATE
+- **Instructor Notes:** Matched complete-sentence control for SFD-008.
 
 #### SFD-009
 
@@ -4402,7 +4429,7 @@ Sheet type: coverage summary and pool-protection guidance.
 - `A1` = Coverage Summary
 - `A11` = Grand total; `G11` = ```text
 Formula: =SUM(G4:G9)
-Cached result: 233
+Cached result: 234
 ```
 
 ### Coverage table
@@ -4442,7 +4469,7 @@ Cached result: 41
 - **Skill:** B - Missing essential parts
 - **Diagnostic:** ```text
 Formula: =COUNTIFS('Sentence Item Bank'!$D:$D,$A5,'Sentence Item Bank'!$C:$C,"Diagnostic reserve")
-Cached result: 6
+Cached result: 7
 ```
 - **Guided:** ```text
 Formula: =COUNTIFS('Sentence Item Bank'!$D:$D,$A5,'Sentence Item Bank'!$B:$B,"Guided practice")
@@ -4462,7 +4489,7 @@ Cached result: 6
 ```
 - **Total:** ```text
 Formula: =SUM(B5:F5)
-Cached result: 46
+Cached result: 47
 ```
 
 #### C - Dependent-clause fragments

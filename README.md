@@ -29,7 +29,7 @@ For immediate user testing, a static HTTPS host such as Netlify Drop, Vercel, or
 - Browser-persisted learner event history using `localStorage`
 - Downloadable HTML mastery-performance report
 - Clear separation between source content, evaluation rules, and browser-local learner state
-- Imported source bank: `question-bank.js` is generated from `Grammartar_Sentence_Fragments_Item_Bank_v3.md` and contains the 208 sentence items, 25 paragraph tasks, coverage metadata, and selection guidance
+- Imported source bank: `question-bank.js` is generated from `Grammartar_Sentence_Fragments_Item_Bank_v3.md` and contains the 209 sentence items, 25 paragraph tasks, coverage metadata, and selection guidance
 - Structured classification-and-reason interactions in place of written rationale prompts
 - Clickable fragment identification plus constrained revision for paragraph tasks
 - Browser-local deterministic scoring for constructed responses; no LLM or external scoring calls
