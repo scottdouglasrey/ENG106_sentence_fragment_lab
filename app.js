@@ -3,7 +3,7 @@ const BANK = window.QUESTION_BANK;
 const RULES = window.EVALUATION_RULES;
 const LOCAL_EVALUATOR = window.OpenTextEvaluator;
 const STORAGE_KEY = 'fragment-lab-state';
-const DATA_VERSION = 'v11-practice-assignment-dashboard';
+const DATA_VERSION = 'v12-post-diagnostic-feedback';
 const MASTERY_THRESHOLD = 75;
 const INITIAL_MASTERY_ITEMS_PER_SKILL = 4;
 
@@ -712,14 +712,15 @@ function assessmentView(kind) {
   const intro = reviewMode ? 'Review your saved responses and feedback. Your completed diagnostic answers cannot be changed.'
     : isMastery ? `This protected check measures the skills that still need mastery evidence. A skill is mastered at ${MASTERY_THRESHOLD}% or higher.`
       : 'Use your best judgment. The diagnostic chooses your learning path and does not count as mastery.';
-  const savedEvaluation = kind === 'diagnostic' && locked
+  const savedEvaluation = reviewMode
     ? (state.diagnosticResults[item.id] || compactEvaluation(evaluateAnswer(item, answers[item.id]))) : null;
   const savedMessage = locked
-    ? (kind === 'diagnostic' ? diagnosticFeedbackBox(item, savedEvaluation)
+    ? (kind === 'diagnostic' ? (reviewMode ? diagnosticFeedbackBox(item, savedEvaluation)
+      : '<div class="saved-answer-note" role="status"><strong>Answer saved.</strong> This response cannot be changed. Feedback will be available after you finish the diagnostic.</div>')
       : '<div class="saved-answer-note" role="status"><strong>Answer saved.</strong> You may review this response, but it cannot be changed.</div>')
     : '';
-  const nextLabel = locked ? 'Next' : (kind === 'diagnostic' ? 'Save & review' : 'Save & next');
-  const finalLabel = isMastery ? 'Finish mastery check' : (locked ? 'See my learning path' : 'Save & review');
+  const nextLabel = locked ? 'Next' : 'Save & next';
+  const finalLabel = isMastery ? 'Finish mastery check' : 'See my learning path';
   const finalControl = reviewMode
     ? `<button class="button" data-view="${activePhase()}">Return to learning path →</button>`
     : `<button class="button accent" data-action="finish-assessment" data-kind="${kind}" ${currentComplete ? '' : 'disabled'}>${finalLabel} →</button>`;
@@ -982,11 +983,7 @@ function saveCurrentAssessmentAnswer() {
 function finishAssessment(event) {
   const kind = event.currentTarget.dataset.kind; const items = assessmentItems(kind); const answers = answersFor(kind);
   if (kind === 'diagnostic') {
-    const item = items[currentQuestion];
-    if (!state.diagnosticLocked?.[item.id]) {
-      if (saveCurrentAssessmentAnswer()) render();
-      return;
-    }
+    if (!saveCurrentAssessmentAnswer()) return;
     const unsavedIndex = items.findIndex((candidate) => !state.diagnosticLocked?.[candidate.id]);
     if (unsavedIndex !== -1) {
       currentQuestion = unsavedIndex; render();
@@ -1167,9 +1164,7 @@ function bindEvents() {
     context.answer = { ...(context.answer || {}), selected: [...selected].sort((a, b) => a - b) }; saveState(); render();
   }));
   document.querySelector('[data-action="next"]')?.addEventListener('click', () => {
-    const context = currentResponseContext(); const wasLocked = Boolean(context?.locked);
     if (!saveCurrentAssessmentAnswer()) return;
-    if (state.view === 'diagnostic' && !wasLocked) { render(); return; }
     currentQuestion = Math.min(currentQuestion + 1, assessmentItems(state.view).length - 1); render();
   });
   document.querySelector('[data-action="previous"]')?.addEventListener('click', () => { currentQuestion = Math.max(currentQuestion - 1, 0); render(); });

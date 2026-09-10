@@ -32,7 +32,7 @@ For immediate user testing, a static HTTPS host such as Netlify Drop, Vercel, or
 - Imported source bank: `question-bank.js` is generated from `Grammartar_Sentence_Fragments_Item_Bank_v3.md` and contains the 209 sentence items, 25 paragraph tasks, coverage metadata, and selection guidance
 - Structured classification-and-reason interactions in place of written rationale prompts
 - Clickable fragment identification plus constrained revision for paragraph tasks
-- Save–review–continue diagnostic flow with locked answers, immediate local feedback, and read-only review after completion
+- Save-and-continue diagnostic flow with locked answers and feedback released only after completion
 - Practice-studio assignment dashboard connecting missed evidence and misconception feedback to assigned skills
 - Browser-local deterministic scoring for constructed responses; no LLM or external scoring calls
 - Explicit `correct`, `incorrect`, and `needsReview` results with plain-language feedback
