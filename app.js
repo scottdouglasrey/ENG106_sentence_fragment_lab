@@ -3,7 +3,7 @@ const BANK = window.QUESTION_BANK;
 const RULES = window.EVALUATION_RULES;
 const LOCAL_EVALUATOR = window.OpenTextEvaluator;
 const STORAGE_KEY = 'fragment-lab-state';
-const DATA_VERSION = 'v8-balanced-missing-parts-diagnostic';
+const DATA_VERSION = 'v9-diagnostic-feedback-review';
 const MASTERY_THRESHOLD = 75;
 const INITIAL_MASTERY_ITEMS_PER_SKILL = 4;
 
@@ -496,9 +496,17 @@ function evaluateAnswer(item, answer) {
   if (item.responseMode === 'paragraphRepair') {
     const selectedCorrectly = sameNumbers(answer?.selected, targetSentenceIndices(item));
     const writing = LOCAL_EVALUATOR.evaluateOpenText(item, answer?.text || '');
-    if (!selectedCorrectly) return result('incorrect', 'Select every fragment in the paragraph before revising it.',
-      { selectedCorrectly, ...writing.checks }, ['One or more sentence selections need another look.'],
-      { misconceptionEvidence: structuredEvidence(item, false, 'E2_CONTEXT_DEPENDENCE', 'strong') });
+    if (!selectedCorrectly) return {
+      ...writing,
+      status: 'incorrect', taskCorrect: false, score: 0,
+      checks: { ...writing.checks, selectedCorrectly },
+      feedback: `Review which sentences are fragments. ${writing.feedback || ''}`.trim(),
+      reasons: ['One or more sentence selections need another look.', ...(writing.reasons || [])],
+      misconceptionEvidence: [
+        ...structuredEvidence(item, false, 'E2_CONTEXT_DEPENDENCE', 'strong'),
+        ...(writing.misconceptionEvidence || [])
+      ]
+    };
     return { ...writing, checks: { selectedCorrectly, ...writing.checks } };
   }
   return LOCAL_EVALUATOR.evaluateOpenText(item, answer || '');
@@ -702,11 +710,19 @@ function assessmentView(kind) {
   const label = isMastery && state.masteryLoops.length ? 'Mastery reassessment' : isMastery ? 'Mastery assessment' : 'Diagnostic assessment';
   const intro = isMastery ? `This protected check measures the skills that still need mastery evidence. A skill is mastered at ${MASTERY_THRESHOLD}% or higher.`
     : 'Use your best judgment. The diagnostic chooses your learning path and does not count as mastery.';
+  const savedEvaluation = kind === 'diagnostic' && locked
+    ? (state.diagnosticResults[item.id] || compactEvaluation(evaluateAnswer(item, answers[item.id]))) : null;
+  const savedMessage = locked
+    ? (kind === 'diagnostic' ? diagnosticFeedbackBox(item, savedEvaluation)
+      : '<div class="saved-answer-note" role="status"><strong>Answer saved.</strong> You may review this response, but it cannot be changed.</div>')
+    : '';
+  const nextLabel = locked ? 'Next' : (kind === 'diagnostic' ? 'Save & review' : 'Save & next');
+  const finalLabel = isMastery ? 'Finish mastery check' : (locked ? 'See my learning path' : 'Save & review');
   return `${journey()}<div class="view-header"><div><p class="eyebrow">${label}</p><h1>${isMastery ? 'Show what you know.' : 'Find your starting point.'}</h1><p class="subhead">${intro}</p></div><span class="pill ${isMastery ? 'accent' : ''}">${items.length} tasks · untimed</span></div><div class="assessment-layout"><aside class="question-list"><h3>Your progress</h3>${items.map((question, index) => {
     const complete = answerComplete(question, answers[question.id]);
     const saved = Boolean(lockedAnswers[question.id]);
     return `<button class="q-nav ${index === currentQuestion ? 'active' : ''} ${complete ? 'answered' : ''}" data-q="${index}"><b>${complete ? '✓' : String(index + 1).padStart(2, '0')}</b><span>${esc(domain(question.domain).name)}<small>${saved ? 'Saved · locked' : complete ? 'Answered · not saved' : 'Not answered'}</small></span></button>`;
-  }).join('')}</aside><section class="question-card">${questionPrompt(item)}${responseControl(item, answers[item.id], locked)}${locked ? '<div class="saved-answer-note" role="status"><strong>Answer saved.</strong> You may review this response, but it cannot be changed.</div>' : ''}<div class="question-footer"><small>${answered} of ${items.length} answered</small><div class="button-row no-margin"><button class="button secondary" data-action="previous" ${currentQuestion === 0 ? 'disabled' : ''}>← Back</button>${currentQuestion < items.length - 1 ? `<button class="button" data-action="next" ${currentComplete ? '' : 'disabled'}>${locked ? 'Next' : 'Save & next'} →</button>` : `<button class="button accent" data-action="finish-assessment" data-kind="${kind}" ${currentComplete ? '' : 'disabled'}>${isMastery ? 'Finish mastery check' : 'See my learning path'} →</button>`}</div></div></section></div>`;
+  }).join('')}</aside><section class="question-card">${questionPrompt(item)}${responseControl(item, answers[item.id], locked)}${savedMessage}<div class="question-footer"><small>${answered} of ${items.length} answered</small><div class="button-row no-margin"><button class="button secondary" data-action="previous" ${currentQuestion === 0 ? 'disabled' : ''}>← Back</button>${currentQuestion < items.length - 1 ? `<button class="button" data-action="next" ${currentComplete ? '' : 'disabled'}>${nextLabel} →</button>` : `<button class="button accent" data-action="finish-assessment" data-kind="${kind}" ${currentComplete ? '' : 'disabled'}>${finalLabel} →</button>`}</div></div></section></div>`;
 }
 
 function stageName(stage) { return { 'Guided practice': 'Guided', 'Independent practice': 'Independent', Verification: 'Verification' }[stage] || stage; }
@@ -751,6 +767,43 @@ function feedbackBox(evaluation, message) {
   const status = evaluation?.status || 'info';
   const heading = status === 'correct' ? 'Correct' : status === 'needsReview' ? 'Let’s check another way' : 'Try again';
   return `<div class="feedback ${status}"><strong>${heading}</strong>${esc(message)}</div>`;
+}
+
+function diagnosticExpectedEvidence(item) {
+  if (item.responseMode === 'choice') return item.choices[item.answer] || '';
+  if (item.responseMode === 'reasonChoice') return item.reasonTask?.choices[item.reasonTask.answer] || '';
+  if (item.responseMode === 'classifyReason') {
+    const reasonTask = reasonTaskFor(item, item.answer);
+    return `${item.choices[item.answer]}. ${reasonTask?.choices[reasonTask.answer] || ''}`.trim();
+  }
+  return '';
+}
+
+function diagnosticFeedbackBox(item, evaluation) {
+  if (!evaluation) return '';
+  const status = evaluation.status || 'incorrect';
+  const heading = status === 'correct' ? 'Your response is correct'
+    : status === 'needsReview' ? 'Review this before continuing' : 'Use this feedback before continuing';
+  const rawDetails = [
+    ...(evaluation.reasons || []),
+    ...(evaluation.responseIssues || []).map((entry) => entry?.message || entry),
+    ...(evaluation.advisories || []).map((entry) => entry?.message || entry)
+  ].map((entry) => String(entry || '').trim()).filter(Boolean);
+  const details = [...new Set(rawDetails)].filter((entry) => entry !== evaluation.feedback);
+  const expected = status === 'correct' ? '' : diagnosticExpectedEvidence(item);
+  const focusTags = [...new Set((evaluation.misconceptionEvidence || [])
+    .filter((entry) => entry.outcome === 'supports').map((entry) => entry.tag).filter(Boolean))];
+  const learningFocus = focusTags.map((tag) => MISCONCEPTION_GUIDANCE[tag]).filter(Boolean)
+    .map((guidance) => `<div class="diagnostic-learning-focus"><strong>${esc(guidance.label)}</strong><p>${esc(guidance.lesson)}</p><span>Try this: ${esc(guidance.tip)}</span></div>`).join('');
+  let paragraphReview = '';
+  if (item.responseMode === 'paragraphRepair') {
+    const targets = targetSentenceIndices(item).map((index) => `${index + 1}. ${paragraphSentences(item)[index]}`);
+    const selectionMessage = evaluation.checks?.selectedCorrectly
+      ? 'You identified all of the sentence fragments.'
+      : `The sentence fragments were: ${targets.join(' ')}`;
+    paragraphReview = `<p><strong>Fragment selection</strong>${esc(selectionMessage)}</p>${status === 'correct' || !item.repair ? '' : `<details><summary>View one acceptable paragraph repair</summary><p>${esc(item.repair)}</p></details>`}`;
+  }
+  return `<section class="diagnostic-feedback ${status}" role="status" aria-live="polite"><h3>${heading}</h3><p>${esc(evaluation.feedback || domain(item.domain).feedback)}</p>${paragraphReview}${expected ? `<p><strong>Correct response</strong>${esc(expected)}</p>` : ''}${learningFocus}${details.length ? `<div class="feedback-details"><strong>Details to review</strong><ul>${details.map((detail) => `<li>${esc(detail)}</li>`).join('')}</ul></div>` : ''}<small>Your answer is saved and cannot be changed. Use this feedback in the learning studio.</small></section>`;
 }
 function compactEvaluation(evaluation) {
   return { status: evaluation.status, taskCorrect: Boolean(evaluation.taskCorrect), score: evaluation.score,
@@ -865,12 +918,31 @@ function saveCurrentAssessmentAnswer() {
       ? 'Complete both steps before saving this answer.' : 'Complete this task before saving your answer.');
     return false;
   }
+  if (state[`${kind}Locked`]?.[item.id]) return true;
   state[`${kind}Locked`] = { ...(state[`${kind}Locked`] || {}), [item.id]: true };
+  if (kind === 'diagnostic') {
+    state.diagnosticResults = {
+      ...(state.diagnosticResults || {}),
+      [item.id]: compactEvaluation(evaluateAnswer(item, answer))
+    };
+  }
   saveState(); return true;
 }
 
 function finishAssessment(event) {
   const kind = event.currentTarget.dataset.kind; const items = assessmentItems(kind); const answers = answersFor(kind);
+  if (kind === 'diagnostic') {
+    const item = items[currentQuestion];
+    if (!state.diagnosticLocked?.[item.id]) {
+      if (saveCurrentAssessmentAnswer()) render();
+      return;
+    }
+    const unsavedIndex = items.findIndex((candidate) => !state.diagnosticLocked?.[candidate.id]);
+    if (unsavedIndex !== -1) {
+      currentQuestion = unsavedIndex; render();
+      showToast('Save and review each diagnostic response before continuing.'); return;
+    }
+  }
   if (items.some((item) => !answerComplete(item, answers[item.id]))) return showToast(`Complete all ${items.length} tasks before finishing.`);
   state[`${kind}Locked`] = Object.fromEntries(items.map((item) => [item.id, true]));
   saveState();
@@ -1045,7 +1117,9 @@ function bindEvents() {
     context.answer = { ...(context.answer || {}), selected: [...selected].sort((a, b) => a - b) }; saveState(); render();
   }));
   document.querySelector('[data-action="next"]')?.addEventListener('click', () => {
+    const context = currentResponseContext(); const wasLocked = Boolean(context?.locked);
     if (!saveCurrentAssessmentAnswer()) return;
+    if (state.view === 'diagnostic' && !wasLocked) { render(); return; }
     currentQuestion = Math.min(currentQuestion + 1, assessmentItems(state.view).length - 1); render();
   });
   document.querySelector('[data-action="previous"]')?.addEventListener('click', () => { currentQuestion = Math.max(currentQuestion - 1, 0); render(); });
