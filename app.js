@@ -3,7 +3,7 @@ const BANK = window.QUESTION_BANK;
 const RULES = window.EVALUATION_RULES;
 const LOCAL_EVALUATOR = window.OpenTextEvaluator;
 const STORAGE_KEY = 'fragment-lab-state';
-const DATA_VERSION = 'v9-diagnostic-feedback-review';
+const DATA_VERSION = 'v10-read-only-diagnostic-review';
 const MASTERY_THRESHOLD = 75;
 const INITIAL_MASTERY_ITEMS_PER_SKILL = 4;
 
@@ -352,12 +352,12 @@ function migrateState(saved) {
     dataVersion: DATA_VERSION, bankVersion: BANK.version, evaluatorVersion: LOCAL_EVALUATOR.version,
     diagnosticItemIds: diagnosticIds,
     diagnosticAnswers: mapLegacyAnswers(saved.diagnosticAnswers, diagnosticIds),
-    diagnosticLocked: saved.diagnosticLocked || (saved.diagnosticComplete
-      ? Object.fromEntries(diagnosticIds.map((id) => [id, true])) : {}),
+    diagnosticLocked: saved.diagnosticComplete
+      ? Object.fromEntries(diagnosticIds.map((id) => [id, true])) : (saved.diagnosticLocked || {}),
     masteryItemIds: oldMasteryIds,
     masteryAnswers: mapLegacyAnswers(saved.masteryAnswers, oldMasteryIds || LEGACY_MASTERY_IDS),
-    masteryLocked: saved.masteryLocked || (saved.masteryComplete
-      ? Object.fromEntries(oldMasteryIds.map((id) => [id, true])) : {}),
+    masteryLocked: saved.masteryComplete
+      ? Object.fromEntries(oldMasteryIds.map((id) => [id, true])) : (saved.masteryLocked || {}),
     diagnosticResults: saved.diagnosticResults || {}, masteryResults: saved.masteryResults || {},
     masteryAttempts: Array.isArray(saved.masteryAttempts) ? saved.masteryAttempts : [],
     masteryEvidence: saved.masteryEvidence || {}, masteryLoops: Array.isArray(saved.masteryLoops) ? saved.masteryLoops : [],
@@ -695,6 +695,7 @@ function responseControl(item, answer, locked = false) {
 
 function assessmentView(kind) {
   const isMastery = kind === 'mastery';
+  const reviewMode = kind === 'diagnostic' && state.diagnosticComplete;
   if (isMastery && !state.masteryItemIds.length) {
     const weakIds = state.masteryLoops.length ? state.masteryLoops[state.masteryLoops.length - 1].weakDomainIds : DOMAINS.map((skill) => skill.id);
     prepareMasterySet(weakIds);
@@ -704,12 +705,13 @@ function assessmentView(kind) {
   currentQuestion = Math.min(currentQuestion, items.length - 1);
   const answers = answersFor(kind); const item = items[currentQuestion];
   const lockedAnswers = state[`${kind}Locked`] || {};
-  const locked = Boolean(lockedAnswers[item.id]);
+  const locked = reviewMode || Boolean(lockedAnswers[item.id]);
   const currentComplete = answerComplete(item, answers[item.id]);
   const answered = items.filter((question) => answerComplete(question, answers[question.id])).length;
-  const label = isMastery && state.masteryLoops.length ? 'Mastery reassessment' : isMastery ? 'Mastery assessment' : 'Diagnostic assessment';
-  const intro = isMastery ? `This protected check measures the skills that still need mastery evidence. A skill is mastered at ${MASTERY_THRESHOLD}% or higher.`
-    : 'Use your best judgment. The diagnostic chooses your learning path and does not count as mastery.';
+  const label = reviewMode ? 'Diagnostic review' : isMastery && state.masteryLoops.length ? 'Mastery reassessment' : isMastery ? 'Mastery assessment' : 'Diagnostic assessment';
+  const intro = reviewMode ? 'Review your saved responses and feedback. Your completed diagnostic answers cannot be changed.'
+    : isMastery ? `This protected check measures the skills that still need mastery evidence. A skill is mastered at ${MASTERY_THRESHOLD}% or higher.`
+      : 'Use your best judgment. The diagnostic chooses your learning path and does not count as mastery.';
   const savedEvaluation = kind === 'diagnostic' && locked
     ? (state.diagnosticResults[item.id] || compactEvaluation(evaluateAnswer(item, answers[item.id]))) : null;
   const savedMessage = locked
@@ -718,11 +720,14 @@ function assessmentView(kind) {
     : '';
   const nextLabel = locked ? 'Next' : (kind === 'diagnostic' ? 'Save & review' : 'Save & next');
   const finalLabel = isMastery ? 'Finish mastery check' : (locked ? 'See my learning path' : 'Save & review');
-  return `${journey()}<div class="view-header"><div><p class="eyebrow">${label}</p><h1>${isMastery ? 'Show what you know.' : 'Find your starting point.'}</h1><p class="subhead">${intro}</p></div><span class="pill ${isMastery ? 'accent' : ''}">${items.length} tasks · untimed</span></div><div class="assessment-layout"><aside class="question-list"><h3>Your progress</h3>${items.map((question, index) => {
+  const finalControl = reviewMode
+    ? `<button class="button" data-view="${activePhase()}">Return to learning path →</button>`
+    : `<button class="button accent" data-action="finish-assessment" data-kind="${kind}" ${currentComplete ? '' : 'disabled'}>${finalLabel} →</button>`;
+  return `${journey()}<div class="view-header"><div><p class="eyebrow">${label}</p><h1>${reviewMode ? 'Review your starting point.' : isMastery ? 'Show what you know.' : 'Find your starting point.'}</h1><p class="subhead">${intro}</p></div><span class="pill ${isMastery ? 'accent' : ''}">${reviewMode ? 'Completed · ' : ''}${items.length} tasks${reviewMode ? '' : ' · untimed'}</span></div><div class="assessment-layout"><aside class="question-list"><h3>${reviewMode ? 'Your responses' : 'Your progress'}</h3>${items.map((question, index) => {
     const complete = answerComplete(question, answers[question.id]);
-    const saved = Boolean(lockedAnswers[question.id]);
+    const saved = reviewMode || Boolean(lockedAnswers[question.id]);
     return `<button class="q-nav ${index === currentQuestion ? 'active' : ''} ${complete ? 'answered' : ''}" data-q="${index}"><b>${complete ? '✓' : String(index + 1).padStart(2, '0')}</b><span>${esc(domain(question.domain).name)}<small>${saved ? 'Saved · locked' : complete ? 'Answered · not saved' : 'Not answered'}</small></span></button>`;
-  }).join('')}</aside><section class="question-card">${questionPrompt(item)}${responseControl(item, answers[item.id], locked)}${savedMessage}<div class="question-footer"><small>${answered} of ${items.length} answered</small><div class="button-row no-margin"><button class="button secondary" data-action="previous" ${currentQuestion === 0 ? 'disabled' : ''}>← Back</button>${currentQuestion < items.length - 1 ? `<button class="button" data-action="next" ${currentComplete ? '' : 'disabled'}>${nextLabel} →</button>` : `<button class="button accent" data-action="finish-assessment" data-kind="${kind}" ${currentComplete ? '' : 'disabled'}>${finalLabel} →</button>`}</div></div></section></div>`;
+  }).join('')}</aside><section class="question-card">${questionPrompt(item)}${responseControl(item, answers[item.id], locked)}${savedMessage}<div class="question-footer"><small>${answered} of ${items.length} answered</small><div class="button-row no-margin"><button class="button secondary" data-action="previous" ${currentQuestion === 0 ? 'disabled' : ''}>← Back</button>${currentQuestion < items.length - 1 ? `<button class="button" data-action="next" ${currentComplete ? '' : 'disabled'}>${nextLabel} →</button>` : finalControl}</div></div></section></div>`;
 }
 
 function stageName(stage) { return { 'Guided practice': 'Guided', 'Independent practice': 'Independent', Verification: 'Verification' }[stage] || stage; }
@@ -890,7 +895,7 @@ function render() {
 function currentResponseContext() {
   if (state.view === 'diagnostic' || state.view === 'mastery') {
     const kind = state.view; const item = assessmentItems(kind)[currentQuestion];
-    return { item, kind, get locked() { return Boolean(state[`${kind}Locked`]?.[item.id]); },
+    return { item, kind, get locked() { return (kind === 'diagnostic' && state.diagnosticComplete) || Boolean(state[`${kind}Locked`]?.[item.id]); },
       get answer() { return state[`${kind}Answers`][item.id]; }, set answer(value) { state[`${kind}Answers`][item.id] = value; } };
   }
   if (state.view === 'practice') {
