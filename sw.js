@@ -1,9 +1,9 @@
-const CACHE_NAME = 'sentence-fragment-lab-v16-post-diagnostic-feedback';
+const CACHE_NAME = 'sentence-fragment-lab-v17-live-text-action';
 const APP_SHELL = [
   './',
   './index.html',
   './styles.css?v=20260910-5',
-  './app.js?v=20260910-7',
+  './app.js?v=20260910-8',
   './question-bank.js?v=20260910-2',
   './evaluation-rules.js?v=20260908-6',
   './open-text-evaluator.js?v=20260908-6',

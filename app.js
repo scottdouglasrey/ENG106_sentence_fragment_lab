@@ -3,7 +3,7 @@ const BANK = window.QUESTION_BANK;
 const RULES = window.EVALUATION_RULES;
 const LOCAL_EVALUATOR = window.OpenTextEvaluator;
 const STORAGE_KEY = 'fragment-lab-state';
-const DATA_VERSION = 'v12-post-diagnostic-feedback';
+const DATA_VERSION = 'v13-live-text-action-state';
 const MASTERY_THRESHOLD = 75;
 const INITIAL_MASTERY_ITEMS_PER_SKILL = 4;
 
@@ -961,6 +961,14 @@ function updateResponse(field, value) {
   saveState();
 }
 
+function syncAssessmentActionState() {
+  if (state.view !== 'diagnostic' && state.view !== 'mastery') return;
+  const item = assessmentItems(state.view)[currentQuestion];
+  if (!item) return;
+  const action = document.querySelector('[data-action="next"], [data-action="finish-assessment"]');
+  if (action) action.disabled = !answerComplete(item, answersFor(state.view)[item.id]);
+}
+
 function saveCurrentAssessmentAnswer() {
   if (state.view !== 'diagnostic' && state.view !== 'mastery') return true;
   const kind = state.view; const item = assessmentItems(kind)[currentQuestion]; const answer = answersFor(kind)[item.id];
@@ -1154,7 +1162,8 @@ function bindEvents() {
         const intervention = ensureIntervention(practiceDomain); intervention.steps[intervention.stepIndex].fallbackAnswer = value;
         saveState(); render(); return;
       }
-      updateResponse(field, value); if (input.type === 'radio') render();
+      updateResponse(field, value);
+      if (input.type === 'radio') render(); else syncAssessmentActionState();
     });
   });
   document.querySelectorAll('[data-action="toggle-sentence"]').forEach((button) => button.addEventListener('click', () => {
