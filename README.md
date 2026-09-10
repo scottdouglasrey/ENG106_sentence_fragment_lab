@@ -33,6 +33,7 @@ For immediate user testing, a static HTTPS host such as Netlify Drop, Vercel, or
 - Structured classification-and-reason interactions in place of written rationale prompts
 - Clickable fragment identification plus constrained revision for paragraph tasks
 - Save–review–continue diagnostic flow with locked answers, immediate local feedback, and read-only review after completion
+- Practice-studio assignment dashboard connecting missed evidence and misconception feedback to assigned skills
 - Browser-local deterministic scoring for constructed responses; no LLM or external scoring calls
 - Explicit `correct`, `incorrect`, and `needsReview` results with plain-language feedback
 - Machine-readable item rules in `evaluation-rules.js` and a shared evaluator in `open-text-evaluator.js`

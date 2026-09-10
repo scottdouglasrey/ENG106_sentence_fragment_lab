@@ -3,7 +3,7 @@ const BANK = window.QUESTION_BANK;
 const RULES = window.EVALUATION_RULES;
 const LOCAL_EVALUATOR = window.OpenTextEvaluator;
 const STORAGE_KEY = 'fragment-lab-state';
-const DATA_VERSION = 'v10-read-only-diagnostic-review';
+const DATA_VERSION = 'v11-practice-assignment-dashboard';
 const MASTERY_THRESHOLD = 75;
 const INITIAL_MASTERY_ITEMS_PER_SKILL = 4;
 
@@ -742,6 +742,49 @@ function fallbackRepair(item) {
   return rotateOptions([correct, `${source}.`, `${source}. Because it was important.`, 'This sentence is complete because it has punctuation.'], 0, `${item.id}-fallback`);
 }
 
+function assignmentEvidence(ids) {
+  const latestAttempt = state.masteryAttempts.at(-1);
+  const useMastery = currentRound() > 1 && latestAttempt?.rows?.length;
+  const rows = useMastery ? latestAttempt.rows : diagnosticRows();
+  return {
+    source: useMastery ? 'latest mastery check' : 'diagnostic',
+    rows: rows.filter((row) => ids.includes(row.item.domain) && row.evaluation.status !== 'correct')
+  };
+}
+
+function assignmentReviewPrompt(item) {
+  if (item.responseMode === 'paragraphRepair') {
+    return `<p class="assignment-instruction">Find and repair the fragments in this paragraph.</p><div class="assignment-stimulus paragraph">${esc(item.paragraph)}</div>`;
+  }
+  const parts = String(item.displayPrompt || item.prompt || '').trim().split(/\n\s*\n/);
+  const instruction = parts.shift() || '';
+  const stimulus = parts.join('\n\n').trim();
+  return `<p class="assignment-instruction">${esc(instruction)}</p>${stimulus ? `<div class="assignment-stimulus">${esc(stimulus)}</div>` : ''}`;
+}
+
+function assignmentDashboard(ids) {
+  const evidence = assignmentEvidence(ids);
+  if (!evidence.rows.length) return '';
+  const skillCount = new Set(evidence.rows.map((row) => row.item.domain)).size;
+  const cards = evidence.rows.map((row, index) => {
+    const { item, answer, evaluation } = row;
+    const expected = diagnosticExpectedEvidence(item) || item.evaluation?.sampleRepair || item.repair || '';
+    const details = [...new Set([...(evaluation.reasons || []),
+      ...(evaluation.responseIssues || []).map((entry) => entry?.message || entry),
+      ...(evaluation.advisories || []).map((entry) => entry?.message || entry)]
+      .map((entry) => String(entry || '').trim()).filter(Boolean))];
+    const supportedTags = [...new Set((evaluation.misconceptionEvidence || [])
+      .filter((entry) => entry.outcome === 'supports').map((entry) => entry.tag).filter(Boolean))];
+    if (!supportedTags.length) supportedTags.push(primaryMisconception(item));
+    const guidance = supportedTags.map((tag) => MISCONCEPTION_GUIDANCE[tag]).filter(Boolean);
+    const stimulus = item.responseMode === 'paragraphRepair' ? item.paragraph
+      : String(item.displayPrompt || item.prompt || '').split(/\n\s*\n/).slice(1).join(' ').trim();
+    const summary = stimulus || domain(item.domain).name;
+    return `<details class="assignment-review-card" ${index === 0 ? 'open' : ''}><summary><span><b>Skill ${item.domain.toUpperCase()} · ${esc(domain(item.domain).name)}</b><small>${esc(summary)}</small></span><em>${evaluation.status === 'needsReview' ? 'Needs review' : 'Incorrect'}</em></summary><div class="assignment-review-body">${assignmentReviewPrompt(item)}<div class="assignment-answer-grid"><div><strong>Your saved response</strong><p>${esc(reportAnswer(item, answer))}</p></div>${expected ? `<div><strong>Evidence to compare</strong><p>${esc(expected)}</p></div>` : ''}</div><div class="assignment-feedback"><strong>Why this needs practice</strong><p>${esc(evaluation.feedback || domain(item.domain).feedback)}</p>${details.length ? `<ul>${details.map((detail) => `<li>${esc(detail)}</li>`).join('')}</ul>` : ''}</div>${guidance.map((entry) => `<div class="assignment-study-focus"><strong>${esc(entry.label)}</strong><p>${esc(entry.lesson)}</p><span>Try this: ${esc(entry.tip)}</span></div>`).join('')}</div></details>`;
+  }).join('');
+  return `<section class="assignment-dashboard"><div class="assignment-dashboard-head"><div><p class="eyebrow">Your saved evidence</p><h2>Why this practice was assigned</h2><p>These ${esc(evidence.source)} responses identified the skills to review before the mastery assessment. Open each item to compare your response with the sentence evidence and study guidance.</p></div><div class="assignment-dashboard-stats"><span><b>${evidence.rows.length}</b> response${evidence.rows.length === 1 ? '' : 's'} to review</span><span><b>${skillCount}</b> skill${skillCount === 1 ? '' : 's'} identified</span></div></div><div class="assignment-review-list">${cards}</div></section>`;
+}
+
 function practiceView() {
   const ids = requiredPracticeIds();
   if (!ids.length) return `${journey()}<div class="view-header"><div><p class="eyebrow">Targeted learning</p><h1>No required practice right now.</h1><p class="subhead">Your diagnostic evidence did not identify a skill below the practice threshold. Diagnostic success does not count as mastery, so your protected mastery check is next.</p></div></div><div class="focus-card"><div><p class="eyebrow">Ready for mastery</p><h3>Continue to the protected assessment.</h3><p>The mastery items have not appeared in diagnostic or practice.</p><button class="button accent" data-action="start-mastery">Begin mastery check →</button></div><div class="focus-icon">✓</div></div>`;
@@ -750,14 +793,15 @@ function practiceView() {
   const focusTag = intervention.focusTags?.[0] || '';
   const guidance = MISCONCEPTION_GUIDANCE[focusTag] || { label: selected.name, lesson: selected.lesson, tip: selected.tip };
   const completeCount = ids.filter((id) => state.interventions[id]?.complete && state.interventions[id]?.round === currentRound()).length;
+  const dashboard = assignmentDashboard(ids);
   if (intervention.complete) {
     const allComplete = practiceComplete();
-    return `${journey()}<div class="view-header"><div><p class="eyebrow">Targeted learning · Round ${currentRound()}</p><h1>Your learning studio.</h1><p class="subhead">Complete each assigned skill through guided practice, independent practice, and verification.</p></div><span class="pill">${completeCount} of ${ids.length} skills complete</span></div>${practiceDomainList(ids, selectedId)}<div class="focus-card learning-complete"><div><p class="eyebrow">Skill ${selectedId.toUpperCase()} complete</p><h3>${esc(selected.name)} verified.</h3><p>Your fresh verification response met the skill requirement.</p>${allComplete ? '<button class="button accent" data-action="start-mastery">Begin mastery check →</button>' : '<p>Choose the next assigned skill above.</p>'}</div><div class="focus-icon">✓</div></div>`;
+    return `${journey()}<div class="view-header"><div><p class="eyebrow">Targeted learning · Round ${currentRound()}</p><h1>Your learning studio.</h1><p class="subhead">Complete each assigned skill through guided practice, independent practice, and verification.</p></div><span class="pill">${completeCount} of ${ids.length} skills complete</span></div>${dashboard}${practiceDomainList(ids, selectedId)}<div class="focus-card learning-complete"><div><p class="eyebrow">Skill ${selectedId.toUpperCase()} complete</p><h3>${esc(selected.name)} verified.</h3><p>Your fresh verification response met the skill requirement.</p>${allComplete ? '<button class="button accent" data-action="start-mastery">Begin mastery check →</button>' : '<p>Choose the next assigned skill above.</p>'}</div><div class="focus-icon">✓</div></div>`;
   }
   const step = intervention.steps[intervention.stepIndex];
   if (!step) return `${journey()}<div class="empty-state"><h2>This skill needs instructor review.</h2><p>No unused item is available for the next learning stage.</p></div>`;
   const item = BANK_BY_ID[step.itemId]; const fallback = step.fallback ? fallbackRepair(item) : null;
-  return `${journey()}<div class="view-header"><div><p class="eyebrow">Targeted learning · Round ${currentRound()}</p><h1>Your learning studio.</h1><p class="subhead">Practice is organized by the same five course skills. Only skills identified by your diagnostic or latest mastery check are assigned.</p></div><span class="pill">${completeCount} of ${ids.length} skills complete</span></div>${practiceDomainList(ids, selectedId)}<div class="stage-progress">${intervention.steps.map((practiceStep, index) => `<span class="${index < intervention.stepIndex ? 'complete' : index === intervention.stepIndex ? 'current' : ''}">${index < intervention.stepIndex ? '✓' : index + 1} ${stageName(practiceStep.stage)}</span>`).join('')}</div><div class="practice-grid"><article class="lesson-card"><p class="eyebrow">Mini lesson · Skill ${selectedId.toUpperCase()}</p><h2>${esc(guidance.label)}</h2><p>${esc(guidance.lesson)}</p><div class="plain-language-tip"><strong>Try this check</strong>${esc(guidance.tip)}</div><ul><li>Read the entire word group.</li><li>Find who or what it is about.</li><li>Find the main verb and decide whether the thought can stand alone.</li></ul></article><article class="practice-question"><p class="eyebrow">${esc(stageName(step.stage))} task</p>${questionPrompt(item, step.fallback ? 'Choose the revision that best completes the thought.' : '')}${step.fallback ? choiceControl(fallback.choices, step.fallbackAnswer, 'fallback') : responseControl(item, step.answer)}<div id="practice-feedback">${step.feedback ? feedbackBox(step.result, step.feedback) : ''}</div><div class="button-row"><button class="button accent" data-action="check-practice">Check my work →</button></div></article></div>`;
+  return `${journey()}<div class="view-header"><div><p class="eyebrow">Targeted learning · Round ${currentRound()}</p><h1>Your learning studio.</h1><p class="subhead">Practice is organized by the same five course skills. Only skills identified by your diagnostic or latest mastery check are assigned.</p></div><span class="pill">${completeCount} of ${ids.length} skills complete</span></div>${dashboard}${practiceDomainList(ids, selectedId)}<div class="stage-progress">${intervention.steps.map((practiceStep, index) => `<span class="${index < intervention.stepIndex ? 'complete' : index === intervention.stepIndex ? 'current' : ''}">${index < intervention.stepIndex ? '✓' : index + 1} ${stageName(practiceStep.stage)}</span>`).join('')}</div><div class="practice-grid"><article class="lesson-card"><p class="eyebrow">Mini lesson · Skill ${selectedId.toUpperCase()}</p><h2>${esc(guidance.label)}</h2><p>${esc(guidance.lesson)}</p><div class="plain-language-tip"><strong>Try this check</strong>${esc(guidance.tip)}</div><ul><li>Read the entire word group.</li><li>Find who or what it is about.</li><li>Find the main verb and decide whether the thought can stand alone.</li></ul></article><article class="practice-question"><p class="eyebrow">${esc(stageName(step.stage))} task</p>${questionPrompt(item, step.fallback ? 'Choose the revision that best completes the thought.' : '')}${step.fallback ? choiceControl(fallback.choices, step.fallbackAnswer, 'fallback') : responseControl(item, step.answer)}<div id="practice-feedback">${step.feedback ? feedbackBox(step.result, step.feedback) : ''}</div><div class="button-row"><button class="button accent" data-action="check-practice">Check my work →</button></div></article></div>`;
 }
 function practiceDomainList(ids, selectedId) {
   const diagnosticById = Object.fromEntries(diagnosticScores().map((score) => [score.id, score]));
