@@ -1,9 +1,9 @@
-const CACHE_NAME = 'sentence-fragment-lab-v14-assignment-dashboard';
+const CACHE_NAME = 'sentence-fragment-lab-v15-dashboard-migration';
 const APP_SHELL = [
   './',
   './index.html',
   './styles.css?v=20260910-5',
-  './app.js?v=20260910-5',
+  './app.js?v=20260910-6',
   './question-bank.js?v=20260910-2',
   './evaluation-rules.js?v=20260908-6',
   './open-text-evaluator.js?v=20260908-6',

@@ -772,7 +772,8 @@ function assignmentDashboard(ids) {
     const details = [...new Set([...(evaluation.reasons || []),
       ...(evaluation.responseIssues || []).map((entry) => entry?.message || entry),
       ...(evaluation.advisories || []).map((entry) => entry?.message || entry)]
-      .map((entry) => String(entry || '').trim()).filter(Boolean))];
+      .map((entry) => String(entry || '').trim()).filter(Boolean))]
+      .filter((entry) => entry !== evaluation.feedback);
     const supportedTags = [...new Set((evaluation.misconceptionEvidence || [])
       .filter((entry) => entry.outcome === 'supports').map((entry) => entry.tag).filter(Boolean))];
     if (!supportedTags.length) supportedTags.push(primaryMisconception(item));
@@ -869,7 +870,7 @@ function compactEvaluation(evaluation) {
 
 function reportAnswer(item, answer) {
   if (answer === undefined || answer === null || answer === '') return 'Not answered';
-  if (item.responseMode === 'choice') return item.choices[Number(answer)] || `Option ${Number(answer) + 1}`;
+  if (item.responseMode === 'choice') return item.choices[Number(answer)] || 'Saved response from an earlier item version';
   if (item.responseMode === 'reasonChoice') return item.reasonTask.choices[Number(answer)] || 'Explanation selected';
   if (item.responseMode === 'classifyReason') {
     const reasonTask = reasonTaskFor(item, answer.classification);
