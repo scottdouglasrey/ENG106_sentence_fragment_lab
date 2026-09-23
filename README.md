@@ -16,7 +16,17 @@ Then visit `http://localhost:4173`.
 
 The site includes a web app manifest, a square brand-colored app icon, and a service worker. When served from `localhost` or HTTPS, a browser can install it as an app and cache the core learning experience for repeat visits. Learner progress is stored in the browser with `localStorage` in this prototype.
 
-The included `.github/workflows/deploy-pages.yml` publishes the static site to GitHub Pages whenever the `main` branch changes. To publish it, create or select a GitHub repository, add this folder as the repository contents, and enable GitHub Pages using **GitHub Actions** as the source. The current local repository does not yet have a GitHub remote configured, so publication still requires the destination repository and an authorized push.
+The included `.github/workflows/deploy-pages.yml` publishes the static site to GitHub Pages whenever the `main` branch changes. GitHub Pages must be enabled with **GitHub Actions** as the source, and the workflow must run successfully after the changes are pushed to `main`.
+
+### Question Inventory page
+
+The question inventory is a separate static page in the same GitHub Pages project. After the Pages workflow deploys the repository, open:
+
+`https://scottdouglasrey.github.io/ENG106_sentence_fragment_lab/question-inventory.html`
+
+The assessment tool remains at the project root:
+
+`https://scottdouglasrey.github.io/ENG106_sentence_fragment_lab/`
 
 For immediate user testing, a static HTTPS host such as Netlify Drop, Vercel, or Cloudflare Pages is usually faster: upload or connect this folder and share the generated preview URL. GitHub Pages is the better long-term option if the project will already live in a GitHub repository.
 

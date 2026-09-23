@@ -724,11 +724,7 @@ function assessmentView(kind) {
   const finalControl = reviewMode
     ? `<button class="button" data-view="${activePhase()}">Return to learning path →</button>`
     : `<button class="button accent" data-action="finish-assessment" data-kind="${kind}" ${currentComplete ? '' : 'disabled'}>${finalLabel} →</button>`;
-  return `${journey()}<div class="view-header"><div><p class="eyebrow">${label}</p><h1>${reviewMode ? 'Review your starting point.' : isMastery ? 'Show what you know.' : 'Find your starting point.'}</h1><p class="subhead">${intro}</p></div><span class="pill ${isMastery ? 'accent' : ''}">${reviewMode ? 'Completed · ' : ''}${items.length} tasks${reviewMode ? '' : ' · untimed'}</span></div><div class="assessment-layout"><aside class="question-list"><h3>${reviewMode ? 'Your responses' : 'Your progress'}</h3>${items.map((question, index) => {
-    const complete = answerComplete(question, answers[question.id]);
-    const saved = reviewMode || Boolean(lockedAnswers[question.id]);
-    return `<button class="q-nav ${index === currentQuestion ? 'active' : ''} ${complete ? 'answered' : ''}" data-q="${index}"><b>${complete ? '✓' : String(index + 1).padStart(2, '0')}</b><span>${esc(domain(question.domain).name)}<small>${saved ? 'Saved · locked' : complete ? 'Answered · not saved' : 'Not answered'}</small></span></button>`;
-  }).join('')}</aside><section class="question-card">${questionPrompt(item)}${responseControl(item, answers[item.id], locked)}${savedMessage}<div class="question-footer"><small>${answered} of ${items.length} answered</small><div class="button-row no-margin"><button class="button secondary" data-action="previous" ${currentQuestion === 0 ? 'disabled' : ''}>← Back</button>${currentQuestion < items.length - 1 ? `<button class="button" data-action="next" ${currentComplete ? '' : 'disabled'}>${nextLabel} →</button>` : finalControl}</div></div></section></div>`;
+  return `${journey()}<div class="view-header"><div><p class="eyebrow">${label}</p><h1>${reviewMode ? 'Review your starting point.' : isMastery ? 'Show what you know.' : 'Find your starting point.'}</h1><p class="subhead">${intro}</p></div><span class="pill ${isMastery ? 'accent' : ''}">${reviewMode ? 'Completed · ' : ''}${items.length} tasks${reviewMode ? '' : ' · untimed'}</span></div><div class="assessment-layout"><section class="question-card">${questionPrompt(item)}${responseControl(item, answers[item.id], locked)}${savedMessage}<div class="question-footer"><small>${answered} of ${items.length} answered</small><div class="button-row no-margin"><button class="button secondary" data-action="previous" ${currentQuestion === 0 ? 'disabled' : ''}>← Back</button>${currentQuestion < items.length - 1 ? `<button class="button" data-action="next" ${currentComplete ? '' : 'disabled'}>${nextLabel} →</button>` : finalControl}</div></div></section></div>`;
 }
 
 function stageName(stage) { return { 'Guided practice': 'Guided', 'Independent practice': 'Independent', Verification: 'Verification' }[stage] || stage; }
@@ -1154,7 +1150,6 @@ function bindEvents() {
     if (target === 'report' && !state.masteryComplete) return showToast('Complete mastery to unlock the final report.');
     setView(target);
   }));
-  document.querySelectorAll('[data-q]').forEach((button) => button.addEventListener('click', () => { currentQuestion = Number(button.dataset.q); render(); }));
   document.querySelectorAll('[data-answer-field]').forEach((input) => {
     input.addEventListener(input.tagName === 'TEXTAREA' ? 'input' : 'change', () => {
       const field = input.dataset.answerField; const value = input.type === 'radio' ? Number(input.value) : input.value;
