@@ -67,6 +67,12 @@ The following should be eligible for acceptance:
 
 The evaluator should not require the exact subject, exact word order, or exact punctuation from the sample repair. It should verify that the response supplies a grammatical subject, retains the original action/content, and forms an appropriate complete clause.
 
+### Item-level lexical alternatives
+
+Each generated item rule may include a small, explicit `preserveAlternatives` list for common high-school/college vocabulary. These entries cover two or three reasonable synonyms for preserved nouns, verbs, adjectives, or adverbs. Rules may also include `preservePronouns` for common person- and animal-referents, including `he`, `she`, `they`, `it`, and their common object/possessive forms.
+
+Alternatives are evidence for preservation, not automatic approval. The response must still satisfy the item’s grammatical structure and the local evaluator must be able to establish the relationship from the surrounding sentence. Ambiguous cases remain eligible for `needsReview`.
+
 ## Evaluation result
 
 Use a structured result internally:
@@ -260,6 +266,8 @@ function finalizeEvaluation(checks, rules) {
 ```
 
 Do not require every soft check to pass. For example, a minor punctuation issue should not automatically make a structurally correct repair incorrect unless punctuation is the target skill.
+
+For mastery evidence, an unresolved `needsReview` response can be followed by an unseen equivalent item with the same target tag when available, then the same evaluation family, then the same skill. A correct first equivalent earns credit; an incorrect first equivalent earns no credit. Three consecutive equivalent `needsReview` responses earn bounded mastery credit because the student has supplied repeated evidence without the local engine identifying a specific error.
 
 ## Item metadata contract
 

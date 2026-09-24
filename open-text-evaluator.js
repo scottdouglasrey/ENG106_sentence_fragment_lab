@@ -596,21 +596,40 @@
     const evidence = sourceEvidence(source);
     const responseActionSet = new Set(actionBases(response));
     const responseTerms = new Set(contentStems(response));
+    const matchesPreservedTerm = (term) => {
+      if (responseTerms.has(term)) return true;
+      const synonym = (rule.preserveAlternatives || []).find((entry) => (
+        entry.source === term || entry.sourceWord === term
+        || (entry.alternatives || []).some((candidate) => stem(candidate) === term)
+      ));
+      if (synonym && (synonym.alternatives || []).some((candidate) => responseTerms.has(stem(candidate)))) return true;
+      const pronoun = (rule.preservePronouns || []).find((entry) => entry.source === term);
+      return Boolean(pronoun && (pronoun.alternatives || []).some((candidate) => responseTerms.has(stem(candidate))));
+    };
+    const matchesPreservedAction = (action) => {
+      if (responseActionSet.has(action)) return true;
+      const synonym = (rule.preserveAlternatives || []).find((entry) => (entry.source === action || entry.sourceWord === action)
+        || (entry.alternatives || []).some((candidate) => stem(candidate) === action));
+      return Boolean(synonym && (synonym.alternatives || []).some((candidate) => responseActionSet.has(stem(candidate))));
+    };
     const requiredActions = evidence.actions;
-    const actionMatches = requiredActions.filter((action) => responseActionSet.has(action));
-    const detailMatches = evidence.details.filter((detail) => responseTerms.has(detail));
+    const actionMatches = requiredActions.filter(matchesPreservedAction);
+    const detailMatches = evidence.details.filter(matchesPreservedTerm);
     const actionsPreserved = !requiredActions.length || actionMatches.length === requiredActions.length;
     const detailRatio = evidence.details.length ? detailMatches.length / evidence.details.length : 1;
     const detailThreshold = rule.kind === 'paragraphRepair' ? 0.7 : 0.65;
     const detailsPreserved = detailRatio >= detailThreshold;
-    const ratio = preservationRatio(source, response);
+    const sourceTerms = [...new Set(contentStems(source))];
+    const ratio = sourceTerms.length
+      ? sourceTerms.filter((term) => matchesPreservedTerm(term) || matchesPreservedAction(term)).length / sourceTerms.length
+      : 1;
     return {
       preserved: actionsPreserved && detailsPreserved && ratio >= (rule.kind === 'paragraphRepair' ? 0.72 : 0.65),
       ratio,
       actionsPreserved,
       detailsPreserved,
-      missingActions: requiredActions.filter((action) => !responseActionSet.has(action)),
-      missingDetails: evidence.details.filter((detail) => !responseTerms.has(detail)),
+      missingActions: requiredActions.filter((action) => !matchesPreservedAction(action)),
+      missingDetails: evidence.details.filter((detail) => !matchesPreservedTerm(detail)),
       primaryAction: evidence.primaryAction
     };
   }
@@ -877,21 +896,41 @@
     const specific = strategyFeedback(strategy);
     if (specific) return specific;
     const messages = {
-      repairMissingSubject: 'Your revision supplies a subject, keeps the original action, and forms a complete sentence.',
-      repairMissingPredicate: 'Your revision supplies a main action for the original subject and forms a complete sentence.',
-      attachDependentClause: 'Your revision keeps the dependent relationship and connects it to a complete thought.',
-      integratePhraseFragment: 'Your revision integrates the phrase into a complete sentence.',
-      writeWithConnector: 'Your sentence uses the requested connecting word and includes a complete thought.',
-      paragraphRepair: 'Your revision addresses the fragments while preserving the paragraph’s meaning.'
+      repairMissingSubject: 'You successfully completed this sentence by adding a clear subject and keeping the original action.',
+      repairMissingPredicate: 'You successfully completed this sentence by giving the original subject a main action.',
+      attachDependentClause: 'You successfully completed this sentence by keeping the connecting word and attaching it to a complete thought.',
+      integratePhraseFragment: 'You successfully completed this sentence by attaching the phrase to a clear subject and main verb.',
+      writeWithConnector: 'You successfully completed this sentence by using the requested connecting word with a complete thought.',
+      paragraphRepair: 'You successfully repaired the paragraph while keeping its original meaning.'
     };
     return messages[kind] || 'Your response makes the requested change and preserves the original idea.';
   }
 
   function chooseFeedback(rule, status, checks, responseIssues, advisories, strategy) {
     const inappropriate = responseIssues.find((entry) => entry.code === 'INAPPROPRIATE_LANGUAGE');
-    if (inappropriate) return inappropriate.message;
+    if (inappropriate) return 'Keep the revision respectful and focused on the sentence task. Try the repair again using course-appropriate language.';
     if (!checks.nonEmpty) return 'Enter a response before checking your work.';
     if (!checks.onTask) return 'Enter a complete revision that responds to the sentence-fragment task.';
+
+    const issueFeedback = {
+      REQUIRED_CONNECTOR_REMOVED: `Keep “${rule.requestedWord || connectorAtStart(rule.sourceText || '') || 'the connecting word'}” in your revision. What complete thought can you add so the relationship between the ideas stays clear?`,
+      ORIGINAL_ACTION_CHANGED: 'You have a complete sentence, but the original action changed. Keep the main action and ask what subject, verb, or clause will finish the thought.',
+      REQUIRED_DETAIL_REMOVED: 'You are close. Compare your revision with the original and bring back the important person, thing, or detail before checking it again.',
+      POLARITY_CHANGED: 'Your revision changes the original positive or negative meaning. Keep the same yes-or-no direction while repairing the fragment.',
+      MODALITY_CHANGED: 'Your revision changes what the original sentence says is possible, required, or certain. Keep that meaning while completing the thought.',
+      TENSE_CHANGED: 'Keep the original time of the action. Look for a subject and verb that complete the thought without moving it into a different time.',
+      MULTIPLE_SENTENCES: 'This task asks for one sentence. Try connecting the ideas with the right subject, verb, or connecting word.',
+      QUESTION_NOT_REQUESTED: 'The task asks for a statement. Turn the question into a complete statement that keeps the original meaning.',
+      REPEATED_WORD: 'Read the sentence aloud and remove the repeated word. Then check that the subject and main verb still make one complete thought.',
+      INFINITIVE_FORM: 'After “to,” use the base form of the verb. Read the phrase as “to ___” and choose the plain verb form.',
+      DO_SUPPORT_FORM: 'After “do,” “does,” or “did,” use the base form of the verb. Keep the helping verb and simplify the next verb.',
+      MODAL_VERB_FORM: 'After a modal such as “can,” “will,” or “should,” use the base form of the verb.',
+      SUBJECT_VERB_AGREEMENT: 'Check who or what is doing the action. Make the verb agree with that subject.',
+      INAPPROPRIATE_LANGUAGE: 'Keep the revision respectful and focused on the sentence task.',
+      UNCERTAIN_CLAUSE_STRUCTURE: 'Your idea may be workable, but the sentence order is hard for the checker to confirm. Try placing the complete thought next to the dependent words and add clear punctuation.'
+    };
+    const directIssue = responseIssues.find((entry) => issueFeedback[entry.code]);
+    if (directIssue && directIssue.code !== 'UNCERTAIN_CLAUSE_STRUCTURE') return issueFeedback[directIssue.code];
 
     const meaningIssue = responseIssues.find((entry) => (
       ['ORIGINAL_ACTION_CHANGED', 'REQUIRED_DETAIL_REMOVED', 'POLARITY_CHANGED', 'MODALITY_CHANGED', 'TENSE_CHANGED'].includes(entry.code)
@@ -908,7 +947,7 @@
 
     if (status === 'needsReview') {
       const review = responseIssues.find((entry) => entry.severity === 'review');
-      return review?.message || 'The response may be valid, but the local checker needs a structured follow-up to confirm the skill.';
+      return issueFeedback[review?.code] || 'Your revision may be valid, but the sentence is unusual enough that I want one more example before counting the skill as demonstrated.';
     }
 
     const positive = positiveFeedback(rule.kind, strategy);

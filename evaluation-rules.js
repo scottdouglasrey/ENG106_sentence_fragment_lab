@@ -13,6 +13,53 @@
     'once', 'as', 'which', 'who', 'whose', 'that'
   ];
 
+  // These are deliberately small, classroom-appropriate synonym groups. They
+  // are copied onto each applicable item below so acceptance stays explicit,
+  // deterministic, and reviewable by an instructor.
+  const synonymGroups = [
+    { canonical: 'change', category: 'verb', words: ['change', 'changed', 'changing', 'changes', 'alter', 'altered', 'altering', 'modify', 'modified', 'modifying', 'revise', 'revised', 'revising', 'adjust', 'adjusted', 'adjusting'] },
+    { canonical: 'begin', category: 'verb', words: ['begin', 'began', 'begun', 'start', 'started', 'starting'] },
+    { canonical: 'end', category: 'verb', words: ['end', 'ended', 'finish', 'finished', 'complete', 'completed'] },
+    { canonical: 'help', category: 'verb', words: ['help', 'helped', 'assist', 'assisted', 'support', 'supported'] },
+    { canonical: 'show', category: 'verb', words: ['show', 'showed', 'shown', 'display', 'displayed', 'demonstrate', 'demonstrated'] },
+    { canonical: 'use', category: 'verb', words: ['use', 'used', 'using', 'apply', 'applied', 'employ', 'employed'] },
+    { canonical: 'make', category: 'verb', words: ['make', 'made', 'create', 'created', 'produce', 'produced'] },
+    { canonical: 'keep', category: 'verb', words: ['keep', 'kept', 'retain', 'retained', 'preserve', 'preserved'] },
+    { canonical: 'look', category: 'verb', words: ['look', 'looked', 'examine', 'examined', 'inspect', 'inspected'] },
+    { canonical: 'move', category: 'verb', words: ['move', 'moved', 'moving', 'shift', 'shifted', 'transfer', 'transferred'] },
+    { canonical: 'need', category: 'verb', words: ['need', 'needed', 'require', 'required'] },
+    { canonical: 'say', category: 'verb', words: ['say', 'said', 'state', 'stated', 'mention', 'mentioned'] },
+    { canonical: 'ask', category: 'verb', words: ['ask', 'asked', 'question', 'questioned', 'request', 'requested'] },
+    { canonical: 'write', category: 'verb', words: ['write', 'wrote', 'written', 'compose', 'composed', 'draft', 'drafted'] },
+    { canonical: 'teacher', category: 'person', words: ['teacher', 'instructor', 'professor', 'lecturer'] },
+    { canonical: 'student', category: 'person', words: ['student', 'students', 'learner', 'learners', 'classmate', 'classmates'] },
+    { canonical: 'group', category: 'person', words: ['group', 'team', 'class', 'committee'] },
+    { canonical: 'friend', category: 'person', words: ['friend', 'partner', 'roommate', 'peer'] },
+    { canonical: 'schedule', category: 'noun', words: ['schedule', 'timetable', 'calendar', 'plan'] },
+    { canonical: 'assignment', category: 'noun', words: ['assignment', 'project', 'task', 'paper'] },
+    { canonical: 'answer', category: 'noun', words: ['answer', 'response', 'reply'] },
+    { canonical: 'idea', category: 'noun', words: ['idea', 'point', 'thought', 'claim'] },
+    { canonical: 'problem', category: 'noun', words: ['problem', 'issue', 'difficulty', 'challenge'] },
+    { canonical: 'important', category: 'adjective', words: ['important', 'significant', 'essential', 'valuable'] },
+    { canonical: 'clear', category: 'adjective', words: ['clear', 'understandable', 'obvious', 'plain'] },
+    { canonical: 'quick', category: 'adjective', words: ['quick', 'fast', 'rapid', 'prompt'] },
+    { canonical: 'small', category: 'adjective', words: ['small', 'little', 'minor', 'limited'] },
+    { canonical: 'large', category: 'adjective', words: ['large', 'big', 'major', 'substantial'] },
+    { canonical: 'often', category: 'adverb', words: ['often', 'frequently', 'regularly'] },
+    { canonical: 'quickly', category: 'adverb', words: ['quickly', 'rapidly', 'promptly', 'swiftly'] },
+    { canonical: 'finally', category: 'adverb', words: ['finally', 'eventually', 'ultimately'] }
+  ];
+  const personTerms = new Set([
+    'person', 'people', 'student', 'students', 'teacher', 'instructor', 'professor',
+    'lecturer', 'classmate', 'classmates', 'partner', 'roommate', 'friend',
+    'group', 'team', 'class', 'committee', 'instructor'
+  ]);
+  const animalTerms = new Set(['animal', 'dog', 'cat', 'bird', 'horse', 'puppy', 'kitten', 'pet']);
+  const commonNames = new Set([
+    'alex', 'avery', 'ben', 'caleb', 'darius', 'evan', 'jordan', 'keisha', 'leah',
+    'lena', 'maya', 'mina', 'noah', 'nora', 'owen', 'priya', 'sofia', 'tyler'
+  ]);
+
   const familyDefaults = {
     repairMissingSubject: {
       targetTag: 'B1_MISSING_SUBJECT',
@@ -112,6 +159,52 @@
     return String(value || '').split(/\s*;\s*/).map((tag) => tag.trim()).filter(Boolean);
   }
 
+  function simpleWord(value) {
+    return String(value || '').toLowerCase().replace(/[^a-z'-]/g, '');
+  }
+
+  function groupFor(word) {
+    const value = simpleWord(word);
+    return synonymGroups.find((group) => group.words.includes(value)) || null;
+  }
+
+  function sourcePreservationMetadata(sourceText) {
+    const words = String(sourceText || '').match(/[A-Za-z']+/g) || [];
+    const seen = new Set();
+    const preserveAlternatives = [];
+    const preservePronouns = [];
+    words.forEach((word) => {
+      const lower = simpleWord(word);
+      const group = groupFor(lower);
+      if (group && !seen.has(group.canonical)) {
+        seen.add(group.canonical);
+        preserveAlternatives.push({
+          source: group.canonical,
+          sourceWord: lower,
+          category: group.category,
+          alternatives: group.words.filter((candidate) => candidate !== lower
+            && !candidate.startsWith(`${group.canonical}s`)
+            && !candidate.startsWith(`${group.canonical}e`)
+            && !candidate.startsWith(`${group.canonical}ing`)).slice(0, 3)
+        });
+      }
+      const isName = commonNames.has(lower);
+      if ((personTerms.has(lower) || animalTerms.has(lower) || isName) && !preservePronouns.some((entry) => entry.source === lower)) {
+        const plural = /s$/.test(lower) && !/ss$/.test(lower);
+        preservePronouns.push({
+          source: lower,
+          category: animalTerms.has(lower) ? 'animal' : 'person',
+          alternatives: plural
+            ? ['they', 'them', 'their']
+            : animalTerms.has(lower)
+              ? ['he', 'she', 'they', 'it', 'him', 'her', 'their', 'its']
+              : ['he', 'she', 'they', 'him', 'her', 'their']
+        });
+      }
+    });
+    return { preserveAlternatives, preservePronouns };
+  }
+
   function familyStarts(familyName, letter) {
     return new RegExp(`^${letter}(?:\\d|\\b)`, 'i').test(String(familyName || '').trim());
   }
@@ -186,6 +279,7 @@
     const kind = ruleKind(item);
     const sourceText = sourceFromPrompt(item.Prompt);
     const tags = parseTags(item['Misconception Tags']);
+    const preservation = sourcePreservationMetadata(sourceText);
     return {
       id: item.ID,
       kind,
@@ -195,6 +289,7 @@
       requestedWord: kind === 'writeWithConnector' ? requestedConnector(item.Prompt) : '',
       sampleRepair: quotedExample(item['Answer / Rubric']),
       misconceptionTags: tags,
+      ...preservation,
       targetTag: targetTagFor(kind, tags),
       requiredChecks: familyDefaults[kind].requiredChecks,
       contract: responseContract(item, kind, sourceText)
@@ -203,6 +298,7 @@
 
   function buildParagraphRule(item) {
     const tags = parseTags(item['Misconception Tags']);
+    const preservation = sourcePreservationMetadata(item.Paragraph);
     return {
       id: item.ID,
       kind: 'paragraphRepair',
@@ -215,6 +311,7 @@
         .filter(Boolean),
       sampleRepair: item['Sample Repair'] || '',
       misconceptionTags: tags,
+      ...preservation,
       targetTag: targetTagFor('paragraphRepair', tags),
       requiredChecks: familyDefaults.paragraphRepair.requiredChecks,
       contract: responseContract(item, 'paragraphRepair', item.Paragraph)

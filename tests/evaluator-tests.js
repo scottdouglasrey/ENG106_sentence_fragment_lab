@@ -49,6 +49,7 @@
     targetFragments: ['Because her apartment had become too noisy.'],
     sampleRepair: paragraphSample
   });
+  const sf086 = { id: 'SF-086', evaluation: window.EVALUATION_RULES.items['SF-086'] };
   const generic = item('T-GENERIC', 'genericRepair', 'A possible fragment.');
 
   const cases = [
@@ -126,6 +127,8 @@
     [paragraph, paragraphSource, 'incorrect'],
     [paragraph, 'The weather was pleasant, and everyone went outside for lunch.', 'incorrect'],
     [paragraph, 'Priya planned to study at the library. Her apartment was noisy. She packed headphones.', 'incorrect'],
+    [sf086, 'While the teacher altered the timetable, students waited for instructions.', 'correct'],
+    [sf086, 'While she changed the schedule, the class waited for an update.', 'correct'],
     [generic, 'A possible fragment that might be repaired.', 'needsReview'],
     [generic, '', 'incorrect']
   ];
@@ -195,7 +198,7 @@
     && strategyResults.fronted.repairStrategy?.id === 'embedded_with_fronting'
     && strategyResults.fronted.misconceptionEvidence[0]?.directness === 'indirect'
     && strategyResults.changedMeaning.repairStrategy?.id === 'meaning_not_preserved'
-    && /^You formed a complete sentence\./.test(strategyResults.changedMeaning.feedback)
+    && /original action|main action/i.test(strategyResults.changedMeaning.feedback)
     && !/incorporates? the original/i.test(strategyResults.changedMeaning.feedback)
     && strategyResults.paragraph.repairStrategy?.id === 'paragraph_fragments_repaired';
   const allPassed = passed === results.length && rulesCount === 86 && genericRuleCount === 0

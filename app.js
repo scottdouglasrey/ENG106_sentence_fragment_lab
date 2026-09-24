@@ -3,7 +3,7 @@ const BANK = window.QUESTION_BANK;
 const RULES = window.EVALUATION_RULES;
 const LOCAL_EVALUATOR = window.OpenTextEvaluator;
 const STORAGE_KEY = 'fragment-lab-state';
-const DATA_VERSION = 'v13-live-text-action-state';
+const DATA_VERSION = 'v14-synonym-pronoun-feedback-state';
 const MASTERY_THRESHOLD = 75;
 const INITIAL_MASTERY_ITEMS_PER_SKILL = 4;
 
@@ -315,7 +315,7 @@ function defaultState() {
     diagnosticAnswers: {}, diagnosticLocked: {}, diagnosticResults: {}, diagnosticComplete: false,
     interventions: {},
     masteryItemIds: [], masteryAnswers: {}, masteryLocked: {}, masteryResults: {}, masteryAttempts: [], masteryEvidence: {},
-    masteryLoops: [], masteryReviewHistory: [], masteryComplete: false,
+    masteryLoops: [], masteryReviewHistory: [], masteryReviewChains: {}, masteryComplete: false,
     events: [], startedAt: new Date().toISOString()
   };
 }
@@ -362,6 +362,7 @@ function migrateState(saved) {
     masteryAttempts: Array.isArray(saved.masteryAttempts) ? saved.masteryAttempts : [],
     masteryEvidence: saved.masteryEvidence || {}, masteryLoops: Array.isArray(saved.masteryLoops) ? saved.masteryLoops : [],
     masteryReviewHistory: Array.isArray(saved.masteryReviewHistory) ? saved.masteryReviewHistory : [],
+    masteryReviewChains: saved.masteryReviewChains || {},
     events: Array.isArray(saved.events) ? saved.events : [], interventions: saved.interventions || {}
   };
   if (!Object.keys(migrated.interventions).length && saved.practice) {
@@ -609,6 +610,24 @@ function ensureIntervention(domainId) {
 }
 function masteryUsedIds() {
   return new Set([...state.masteryAttempts.flatMap((attempt) => attempt.itemIds || []), ...state.masteryReviewHistory.map((entry) => entry.itemId)]);
+}
+function masteryEvidenceKey(item) {
+  const rule = item.evaluation || {};
+  return `${item.domain}|${rule.targetTag || ''}|${rule.kind || item.family || ''}`;
+}
+function masteryChainFor(item) {
+  const entries = Object.entries(state.masteryReviewChains || {});
+  return entries.find(([, chain]) => chain.currentId === item.id || chain.rootId === item.id);
+}
+function masteryEquivalentItem(item, reservedIds = []) {
+  const used = masteryUsedIds();
+  reservedIds.forEach((id) => used.add(id));
+  const candidates = itemsFor('Mastery assessment', item.domain).filter((candidate) => candidate.id !== item.id && !used.has(candidate.id));
+  const targetTag = item.evaluation?.targetTag || '';
+  const kind = item.evaluation?.kind || item.family || '';
+  return candidates.find((candidate) => candidate.evaluation?.targetTag === targetTag && candidate.evaluation?.kind === kind)
+    || candidates.find((candidate) => candidate.evaluation?.kind === kind)
+    || candidates.find((candidate) => candidate.family === item.family);
 }
 function prepareMasterySet(domainIds = DOMAINS.map((skill) => skill.id)) {
   if (state.masteryItemIds.length) return true;
@@ -920,7 +939,7 @@ function eventDescription(event) {
 function reportView() {
   const diagnostic = diagnosticRows(); const interventions = completedInterventions(); const finalScores = finalMasteryScores();
   const finalRows = Object.values(state.masteryEvidence).flatMap((evidence) => evidence.rows || []); const events = state.events.slice().reverse();
-  return `${journey()}<div class="view-header"><div><p class="eyebrow">Learning record</p><h1>Your mastery report.</h1><p class="subhead">This report records the complete route through the lab: diagnostic evidence, completed learning interventions, reassessment loops, and final mastery evidence.</p></div><button class="button" data-action="download-report">⇩ Download report</button></div><div class="report-card"><div><p class="eyebrow">${state.masteryComplete ? 'Mastery achieved' : 'In progress'}</p><h2>${state.masteryComplete ? 'All five sentence-fragment skills are mastered.' : 'Complete the path to finish this report.'}</h2><p>Your progress is stored only in this browser. Download the report before clearing browser data or moving to another device.</p></div><div class="report-art">${state.masteryComplete ? '✓' : '◌'}</div></div><div class="report-stats"><div class="report-stat"><b>${state.diagnosticComplete ? `${diagnosticOverall()}%` : '—'}</b><small>Diagnostic starting point</small></div><div class="report-stat"><b>${interventions.length}</b><small>Completed interventions</small></div><div class="report-stat"><b>${state.masteryComplete ? `${finalMasteryOverall()}%` : '—'}</b><small>Final mastery evidence</small></div></div><section class="report-section"><h3>1. Diagnostic assessment results</h3><p>The diagnostic identifies which of the five skills receive targeted learning. “Needs review” responses receive no automatic credit but are routed to instruction rather than labeled wrong.</p>${state.diagnosticComplete ? `${reportDomainTable(diagnosticScores())}<details class="report-detail"><summary>View diagnostic task details</summary><table class="report-table"><thead><tr><th>Task</th><th>Skill</th><th>Learner response</th><th>Expected evidence</th><th>Result</th></tr></thead><tbody>${reportItemRows(diagnostic)}</tbody></table></details>` : '<p class="report-empty">Diagnostic results will appear after completion.</p>'}</section><section class="report-section"><h3>2. Completed learning interventions</h3><p>Each assigned skill moves through guided practice, independent practice, and an unseen verification task.</p>${interventions.length ? `<table class="report-table"><thead><tr><th>Date</th><th>Round</th><th>Skill</th><th>Stage</th><th>Task</th><th>Result</th></tr></thead><tbody>${interventionTableRows()}</tbody></table>` : '<p class="report-empty">No completed interventions were required or recorded.</p>'}</section><section class="report-section"><h3>3. Mastery assessment results</h3><p>Initial mastery uses four protected tasks per skill. Reassessments use the remaining unseen items for skills that need additional evidence.</p>${masteryAttemptTable()}${state.masteryComplete ? `${reportDomainTable(finalScores)}<details class="report-detail"><summary>View final mastery task details</summary><table class="report-table"><thead><tr><th>Task</th><th>Skill</th><th>Learner response</th><th>Expected evidence</th><th>Result</th></tr></thead><tbody>${reportItemRows(finalRows)}</tbody></table></details>` : ''}</section><section class="report-section"><h3>Learning history</h3><p>These saved events show the sequence that produced the final result.</p><div class="timeline">${events.length ? events.map((event) => `<div class="timeline-item"><div class="timeline-date">${formatDate(event.at)}<br/>${formatTime(event.at)}</div><div class="timeline-line"></div><div class="timeline-content"><b>${esc(event.detail)}</b><p>${esc(eventDescription(event))}</p></div></div>`).join('') : '<div class="empty-state">Complete your diagnostic to begin your learning history.</div>'}</div></section><p class="privacy-note">Local evaluator ${esc(LOCAL_EVALUATOR.version)} · No AI or external scoring service was used.</p>`;
+  return `${journey()}<div class="view-header"><div><p class="eyebrow">Learning record</p><h1>Your mastery report.</h1><p class="subhead">This report records the complete route through the lab: diagnostic evidence, completed learning interventions, reassessment loops, and final mastery evidence.</p></div><button class="button" data-action="download-report">⇩ Download report</button></div><div class="report-card"><div><p class="eyebrow">${state.masteryComplete ? 'Mastery achieved' : 'In progress'}</p><h2>${state.masteryComplete ? 'All five sentence-fragment skills are mastered.' : 'Complete the path to finish this report.'}</h2><p>Your progress is stored only in this browser. Download the report before clearing browser data or moving to another device.</p></div><div class="report-art">${state.masteryComplete ? '✓' : '◌'}</div></div><div class="report-stats"><div class="report-stat"><b>${state.diagnosticComplete ? `${diagnosticOverall()}%` : '—'}</b><small>Diagnostic starting point</small></div><div class="report-stat"><b>${interventions.length}</b><small>Completed interventions</small></div><div class="report-stat"><b>${state.masteryComplete ? `${finalMasteryOverall()}%` : '—'}</b><small>Final mastery evidence</small></div></div><section class="report-section"><h3>1. Diagnostic assessment results</h3><p>The diagnostic identifies which of the five skills receive targeted learning. “Needs review” responses are routed to instruction rather than labeled wrong.</p>${state.diagnosticComplete ? `${reportDomainTable(diagnosticScores())}<details class="report-detail"><summary>View diagnostic task details</summary><table class="report-table"><thead><tr><th>Task</th><th>Skill</th><th>Learner response</th><th>Expected evidence</th><th>Result</th></tr></thead><tbody>${reportItemRows(diagnostic)}</tbody></table></details>` : '<p class="report-empty">Diagnostic results will appear after completion.</p>'}</section><section class="report-section"><h3>2. Completed learning interventions</h3><p>Each assigned skill moves through guided practice, independent practice, and an unseen verification task.</p>${interventions.length ? `<table class="report-table"><thead><tr><th>Date</th><th>Round</th><th>Skill</th><th>Stage</th><th>Task</th><th>Result</th></tr></thead><tbody>${interventionTableRows()}</tbody></table>` : '<p class="report-empty">No completed interventions were required or recorded.</p>'}</section><section class="report-section"><h3>3. Mastery assessment results</h3><p>Initial mastery uses four protected tasks per skill. Reassessments use remaining unseen equivalents when the local evaluator needs more evidence. A correct equivalent or three consecutive needs-review responses can resolve that evidence sequence.</p>${masteryAttemptTable()}${state.masteryComplete ? `${reportDomainTable(finalScores)}<details class="report-detail"><summary>View final mastery task details</summary><table class="report-table"><thead><tr><th>Task</th><th>Skill</th><th>Learner response</th><th>Expected evidence</th><th>Result</th></tr></thead><tbody>${reportItemRows(finalRows)}</tbody></table></details>` : ''}</section><section class="report-section"><h3>Learning history</h3><p>These saved events show the sequence that produced the final result.</p><div class="timeline">${events.length ? events.map((event) => `<div class="timeline-item"><div class="timeline-date">${formatDate(event.at)}<br/>${formatTime(event.at)}</div><div class="timeline-line"></div><div class="timeline-content"><b>${esc(event.detail)}</b><p>${esc(eventDescription(event))}</p></div></div>`).join('') : '<div class="empty-state">Complete your diagnostic to begin your learning history.</div>'}</div></section><p class="privacy-note">Local evaluator ${esc(LOCAL_EVALUATOR.version)} · No AI or external scoring service was used.</p>`;
 }
 
 function render() {
@@ -997,7 +1016,7 @@ function finishAssessment(event) {
   if (items.some((item) => !answerComplete(item, answers[item.id]))) return showToast(`Complete all ${items.length} tasks before finishing.`);
   state[`${kind}Locked`] = Object.fromEntries(items.map((item) => [item.id, true]));
   saveState();
-  const rows = assessmentRows(kind, items, answers); const score = overallFromRows(rows); const scores = domainScoresFromRows(rows);
+  let rows = assessmentRows(kind, items, answers); let score = overallFromRows(rows); let scores = domainScoresFromRows(rows);
   if (kind === 'diagnostic') {
     state.diagnosticResults = Object.fromEntries(rows.map((row) => [row.item.id, compactEvaluation(row.evaluation)])); state.diagnosticComplete = true;
     record('assessment', `Diagnostic assessment complete · ${score}%`, { assessment: 'diagnostic', score,
@@ -1007,15 +1026,59 @@ function finishAssessment(event) {
     showToast(requiredPracticeIds().length ? 'Your targeted learning path is ready.' : 'Your mastery check is ready.'); return;
   }
   const replacements = [];
-  rows.filter((row) => row.evaluation.status === 'needsReview').forEach((row) => {
-    const replacement = itemsFor('Mastery assessment', row.item.domain).find((candidate) => !masteryUsedIds().has(candidate.id)
-      && !state.masteryItemIds.includes(candidate.id) && !replacements.some((entry) => entry.newId === candidate.id));
-    if (replacement) replacements.push({ oldId: row.item.id, newId: replacement.id, evaluation: row.evaluation });
+  rows.forEach((row) => {
+    const chainEntry = masteryChainFor(row.item);
+    const chain = chainEntry?.[1];
+    if (row.evaluation.status === 'incorrect' && chain && chain.currentId === row.item.id) {
+      chain.outcome = 'incorrect';
+      chain.terminatedAt = new Date().toISOString();
+      return;
+    }
+    if (row.evaluation.status !== 'needsReview') {
+      if (chain && chain.currentId === row.item.id && row.evaluation.status === 'correct') chain.outcome = 'correct';
+      return;
+    }
+
+    const rootId = chain?.rootId || row.item.id;
+    const active = chain || {
+      rootId,
+      currentId: row.item.id,
+      evidenceKey: masteryEvidenceKey(row.item),
+      needsReviewCount: 0,
+      outcome: 'pending',
+      itemIds: []
+    };
+    active.needsReviewCount += 1;
+    active.itemIds = [...new Set([...(active.itemIds || []), row.item.id])];
+    state.masteryReviewChains[rootId] = active;
+
+    if (active.needsReviewCount >= 3) {
+      row.evaluation = {
+        ...row.evaluation,
+        status: 'correct',
+        taskCorrect: true,
+        score: 1,
+        confidence: 'bounded-review',
+        masteryCredit: 'three-equivalent-needsReview'
+      };
+      active.outcome = 'credit';
+      return;
+    }
+
+    const replacement = masteryEquivalentItem(row.item, [
+      ...state.masteryItemIds,
+      ...replacements.map((entry) => entry.newId)
+    ]);
+    if (replacement) {
+      replacements.push({ oldId: row.item.id, newId: replacement.id, evaluation: row.evaluation, chain: active });
+    }
   });
   if (replacements.length) {
     replacements.forEach((replacement) => {
       state.masteryReviewHistory.push({ itemId: replacement.oldId, answer: state.masteryAnswers[replacement.oldId],
-        evaluation: compactEvaluation(replacement.evaluation), at: new Date().toISOString() });
+        evaluation: compactEvaluation(replacement.evaluation), chainId: replacement.chain.rootId, at: new Date().toISOString() });
+      replacement.chain.currentId = replacement.newId;
+      replacement.chain.itemIds = [...new Set([...(replacement.chain.itemIds || []), replacement.newId])];
       state.masteryItemIds = state.masteryItemIds.map((id) => id === replacement.oldId ? replacement.newId : id);
       delete state.masteryAnswers[replacement.oldId];
       delete state.masteryLocked[replacement.oldId];
@@ -1023,8 +1086,9 @@ function finishAssessment(event) {
     record('alternate', `${replacements.length} mastery response${replacements.length === 1 ? '' : 's'} received unseen alternate tasks`,
       { replacements: replacements.map(({ oldId, newId }) => ({ oldId, newId })) });
     currentQuestion = Math.max(0, state.masteryItemIds.findIndex((id) => replacements.some((entry) => entry.newId === id)));
-    render(); showToast('An unseen alternate task is ready for each response needing review.'); return;
+    saveState(); render(); showToast('An equivalent unseen task is ready so the skill can be confirmed.'); return;
   }
+  score = overallFromRows(rows); scores = domainScoresFromRows(rows);
   const attemptNumber = state.masteryAttempts.length + 1; const assessedScores = scores.filter((skill) => skill.total > 0); const at = new Date().toISOString();
   const storedRows = rows.map((row) => ({ item: row.item, answer: row.answer, answered: row.answered, evaluation: compactEvaluation(row.evaluation) }));
   assessedScores.forEach((skill) => {

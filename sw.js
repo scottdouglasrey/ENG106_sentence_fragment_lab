@@ -1,12 +1,12 @@
-const CACHE_NAME = 'sentence-fragment-lab-v17-live-text-action';
+const CACHE_NAME = 'sentence-fragment-lab-v18-synonym-pronoun-mastery';
 const APP_SHELL = [
   './',
   './index.html',
   './styles.css?v=20260910-5',
-  './app.js?v=20260910-8',
+  './app.js?v=20260924-1',
   './question-bank.js?v=20260910-2',
-  './evaluation-rules.js?v=20260908-6',
-  './open-text-evaluator.js?v=20260908-6',
+  './evaluation-rules.js?v=20260924-3',
+  './open-text-evaluator.js?v=20260924-3',
   './tests/evaluator-tests.html',
   './tests/evaluator-tests.js?v=20260908-6',
   './manifest.webmanifest',

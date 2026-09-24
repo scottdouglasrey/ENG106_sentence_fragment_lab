@@ -48,6 +48,9 @@ For immediate user testing, a static HTTPS host such as Netlify Drop, Vercel, or
 - Explicit `correct`, `incorrect`, and `needsReview` results with plain-language feedback
 - Machine-readable item rules in `evaluation-rules.js` and a shared evaluator in `open-text-evaluator.js`
 - Unseen alternate verification/mastery items when a response cannot be scored confidently
+- Item-level synonym and person/animal-pronoun alternatives for meaning preservation, using bounded deterministic vocabulary
+- Warm, prepared mentor-style feedback for predictable open-text errors and successful repairs
+- Mastery handling for uncertain evidence: a correct equivalent earns credit, an incorrect first equivalent does not, and three consecutive equivalent `needsReview` results earn bounded credit
 - Backward-compatible migration of the earlier browser state shape
 - Official BYU-Idaho logo assets are stored in `assets/`
 - BYU-Idaho brand palette: Brand Blue `#006EB6`, black `#000000`, white `#FFFFFF`, gray `#949598`, with restrained supporting accents `#214491`, `#4F9ACF`, and `#A0D4ED`
