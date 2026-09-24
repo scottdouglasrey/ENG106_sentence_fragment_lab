@@ -1,9 +1,9 @@
-const CACHE_NAME = 'sentence-fragment-lab-v18-synonym-pronoun-mastery';
+const CACHE_NAME = 'sentence-fragment-lab-v19-overview-onboarding';
 const APP_SHELL = [
   './',
   './index.html',
-  './styles.css?v=20260910-5',
-  './app.js?v=20260924-1',
+  './styles.css?v=20260924-1',
+  './app.js?v=20260924-2',
   './question-bank.js?v=20260910-2',
   './evaluation-rules.js?v=20260924-3',
   './open-text-evaluator.js?v=20260924-3',

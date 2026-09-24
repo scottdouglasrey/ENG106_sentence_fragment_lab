@@ -664,22 +664,34 @@ function journey() {
   return '';
 }
 function recentActivity() {
-  if (!state.events.length) return '<div class="empty-state compact">Your learning history will appear here.</div>';
+  if (!state.events.length) return '<div class="empty-state compact">Your completed diagnostic, practice, and mastery steps will appear here.</div>';
   return state.events.slice(-3).reverse().map((event, index) => `<div class="activity-row"><span class="activity-icon ${index === 1 ? 'accent' : ''}">${event.type.includes('assessment') ? '✓' : '✦'}</span><span><b>${esc(event.detail)}</b><small>${formatDate(event.at)} · ${formatTime(event.at)}</small></span></div>`).join('');
 }
 function overviewView() {
-  const diagnosticScore = state.diagnosticComplete ? `${diagnosticOverall()}%` : '—';
+  const diagnosticScore = state.diagnosticComplete ? `${diagnosticOverall()}%` : 'Not started';
   const masteryScore = state.masteryComplete ? `${finalMasteryOverall()}%` : '—';
   const required = requiredPracticeIds();
   const completed = required.filter((id) => state.interventions[id]?.complete && state.interventions[id]?.round === currentRound()).length;
   const next = !state.diagnosticComplete
-    ? ['Start here', 'Find your sentence-fragment starting point.', 'Your answers help the lab choose the skills you need. This is not a course grade.', 'Begin diagnostic', 'diagnostic']
+    ? ['Step 1 of 4', 'Complete the diagnostic first.', 'Answer a short set of questions so the lab can find your starting point. Your results choose the practice you see next.', 'This is a starting point—not a course grade.', 'Begin diagnostic', 'diagnostic', 'Start with the diagnostic']
     : !practiceComplete()
-      ? ['Up next', 'Complete your targeted learning path.', 'Each assigned skill includes guided practice, independent practice, and a fresh verification item.', 'Open learning studio', 'practice']
+      ? ['Step 2 of 4', 'Continue to targeted practice.', 'Work through the skills selected by your diagnostic. Each skill includes guided practice, independent practice, and a fresh verification item.', 'Complete each assigned skill before continuing to mastery.', 'Open learning studio', 'practice', 'Your next step is targeted practice']
       : !state.masteryComplete
-        ? ['Up next', 'Show what you know.', 'The mastery check uses protected items that have not appeared during practice.', 'Begin mastery check', 'mastery']
-        : ['Complete', 'Download your mastery report.', 'Your report includes diagnostic results, completed interventions, mastery attempts, and final evidence.', 'View report', 'report'];
-  return `${journey()}<div class="hero"><div class="hero-copy"><p class="eyebrow">Sentence Fragment Lab</p><h1>Make every sentence<br/>complete.</h1><p class="subhead">Spot, repair, and prevent sentence fragments through a learning path that responds to your work.</p></div><div class="hero-note"><strong>Your work stays on this device.</strong> No account is required. Progress and report data are stored only in this browser.</div></div><div class="grid-3"><div class="card metric-card"><span class="metric-label">Diagnostic</span><div class="metric-value">${diagnosticScore}</div><div class="metric-detail">${state.diagnosticComplete ? 'Starting point recorded' : 'Not started'}</div></div><div class="card metric-card accent"><span class="metric-label">Targeted skills completed</span><div class="metric-value">${completed}<small> / ${required.length}</small></div><div class="metric-detail">Guided → independent → verification</div></div><div class="card metric-card dark"><span class="metric-label">Mastery</span><div class="metric-value">${masteryScore}</div><div class="metric-detail">${state.masteryComplete ? 'All five skills mastered' : 'Protected final evidence'}</div></div></div><div class="section-head"><div><h2>What happens next?</h2><p>Your next step is based on your saved progress.</p></div></div><div class="overview-grid"><div class="focus-card"><div><p class="eyebrow">${next[0]}</p><h3>${next[1]}</h3><p>${next[2]}</p><button class="button accent" data-action="overview-next" data-view="${next[4]}">${next[3]} <span>→</span></button></div><div class="focus-icon">${state.masteryComplete ? '✓' : '◎'}</div></div><div class="card activity-card"><h3>Recent activity</h3>${recentActivity()}</div></div>`;
+        ? ['Step 3 of 4', 'Show what you know.', 'Complete the mastery check using new questions that did not appear during practice.', 'Use your best judgment and apply the skills you practiced.', 'Begin mastery check', 'mastery', 'Your next step is the mastery check']
+        : ['Step 4 of 4', 'Review your learning journey.', 'Your report brings together your diagnostic results, completed practice, mastery attempts, and final evidence.', 'Your results are ready to review and download.', 'View report', 'report', 'Your learning path is complete'];
+  const path = [
+    ['diagnostic', 'Diagnostic', 'Find your starting point'],
+    ['practice', 'Targeted practice', 'Build the skills you need'],
+    ['mastery', 'Mastery check', 'Show what you know'],
+    ['report', 'My report', 'Review your journey']
+  ];
+  const currentStep = path.findIndex(([view]) => view === next[5]);
+  const pathSteps = path.map(([view, label, detail], index) => {
+    const stepClass = index < currentStep ? 'complete' : index === currentStep ? 'current' : '';
+    const marker = index < currentStep ? '✓' : index + 1;
+    return `<div class="overview-path-step ${stepClass}" data-path-view="${view}"><span class="overview-path-dot">${marker}</span><span><b>${label}</b><small>${detail}</small></span></div>`;
+  }).join('');
+  return `${journey()}<section class="hero overview-hero"><div class="hero-copy"><p class="eyebrow">Sentence Fragment Lab</p><h1>Make every sentence<br/>complete.</h1><p class="subhead">Identify sentence fragments, practice the skills you need, and complete a final mastery check.</p></div></section><div class="section-head overview-section-head"><div><h2>${state.diagnosticComplete ? 'Continue here' : 'Start here'}</h2><p>${state.diagnosticComplete ? 'Your next step is based on your saved progress.' : 'Your first step is the diagnostic.'}</p></div></div><section class="overview-start-card" aria-labelledby="overview-next-heading"><div class="overview-start-copy"><p class="eyebrow">${next[0]}</p><h3 id="overview-next-heading">${next[1]}</h3><p>${next[2]}</p><p class="overview-reassurance">${next[3]}</p><button class="button accent" data-action="overview-next" data-view="${next[5]}">${next[4]} <span>→</span></button></div><div class="focus-icon" aria-hidden="true">${state.masteryComplete ? '✓' : '◎'}</div></section><section class="overview-path" aria-label="Learning path overview"><div class="overview-path-head"><strong>What happens next</strong><span>${next[6]}</span></div><div class="overview-path-grid">${pathSteps}</div></section><div class="section-head overview-progress-head"><div><h2>Your progress</h2><p>A snapshot of the work you have completed.</p></div></div><section class="grid-3" aria-label="Progress snapshot"><div class="card metric-card"><span class="metric-label">Diagnostic</span><div class="metric-value ${state.diagnosticComplete ? '' : 'metric-value-text'}">${diagnosticScore}</div><div class="metric-detail">${state.diagnosticComplete ? 'Starting point recorded' : 'Complete this first'}</div></div><div class="card metric-card accent"><span class="metric-label">Targeted skills completed</span><div class="metric-value">${completed}<small> / ${required.length}</small></div><div class="metric-detail">${state.diagnosticComplete ? 'Guided → independent → verification' : 'Assigned after the diagnostic'}</div></div><div class="card metric-card dark"><span class="metric-label">Mastery</span><div class="metric-value">${masteryScore}</div><div class="metric-detail">${state.masteryComplete ? 'All five skills mastered' : 'Protected final evidence'}</div></div></section><section class="card activity-card overview-activity"><h3>Recent activity</h3>${recentActivity()}</section>`;
 }
 
 function choiceControl(choices, selected, field = 'choice', disabled = false) {
